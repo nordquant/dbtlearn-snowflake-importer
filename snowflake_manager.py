@@ -56,7 +56,7 @@ and then click start setup.
 * Create the REPORTER role and grant it to the `dbt` user. _We'll use this role later in the course when we build a dashboard.
 
 Please keep in mind that this is a beta version implemented in late October 2024 and it may have some rought edges. 
-I'd be very happy if you could provide feedback on wether the tool works and how to improve it.
+I'd be very happy if you could provide feedback on wether the tool works and how to improve it. Just send me a message on Udemy.
 
 """
 
@@ -71,7 +71,7 @@ def main():
     )
     st.markdown(hello_msg)
     hostname = st.text_input(
-        "Snoflake account (this looks like as `frgcsyo-ie17820` or `frgcsyo-ie17820.aws`, check your snowlake registration email):", "")
+        "Snowflake account (this looks like as `frgcsyo-ie17820` or `frgcsyo-ie17820.aws`, check your snowlake registration email):", "")
     username = st.text_input(
         "Snowflake username (change this is you didn't set it to `admin` at registration):", "admin")
     password = st.text_input("Snowflake Password (it will be visible!):", pw)
