@@ -1,0 +1,7 @@
+streamlit
+sqlalchemy
+snowflake-sqlalchemy
+
+black
+flake8
+isort
