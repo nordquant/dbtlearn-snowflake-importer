@@ -10,6 +10,7 @@ from sqlalchemy import text
 import streamlit as st
 from sqlalchemy import create_engine
 from sqlalchemy.dialects import registry
+import logging
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -44,7 +45,7 @@ def get_sql_commands(md):
 hello_msg = """
 # dbt Zero to Hero Snowflake Importer
 
-Hi, this webapp helps you set up your Snowflake account 
+Hi, this webapp helps you set up your Snowflake account
 and import the course resources, such as raw tables and user roles
 into your Snowflake account. Simply add the snowflake hostname, username and password
 and then click start setup.
@@ -55,7 +56,7 @@ and then click start setup.
 * Import the raw AirBnB tables
 * Create the REPORTER role and grant it to the `dbt` user. _We'll use this role later in the course when we build a dashboard.
 
-Please keep in mind that this is a beta version implemented in late October 2024 and it may have some rought edges. 
+Please keep in mind that this is a beta version implemented in late October 2024 and it may have some rought edges.
 I'd be very happy if you could provide feedback on wether the tool works and how to improve it. Just send me a message on Udemy.
 
 """
@@ -80,9 +81,16 @@ def main():
         with open(CURRENT_DIR + "/course-resources.md", "r") as file:
             md = file.read().rstrip()
 
-        with st.status("Connecting to Snowflake"):
-            pass
-            connection = get_snowflake_connection(hostname, username, password)
+        try:
+            with st.status("Connecting to Snowflake"):
+                connection = get_snowflake_connection(
+                    hostname, username, password)
+        except Exception as e:
+            st.error(
+                f"Error connecting to Snowflake. This usually means that the snowflake account name, username or password you provided is not valid. Please correct the account name and retry by pressing the Start Setup button.\n\nOriginal Error:\n\n{e}")
+            logging.warning(f"Error connecting to Snowflake. Account name: {
+                            hostname}\n Original Error: {e}")
+            return
 
         with st.status("Setting up your Snowflake environment"):
             sql_commands = get_sql_commands(md)
