@@ -72,7 +72,7 @@ def main():
     )
     st.markdown(hello_msg)
     hostname = st.text_input(
-        "Snowflake account (this looks like as `frgcsyo-ie17820` or `frgcsyo-ie17820.aws`, check your snowlake registration email):", "")
+        "Snowflake account name (this looks like as `frgcsyo-ie17820` or `frgcsyo-ie17820.aws`, check your snowlake registration email). _This is not your username, but the first part of the snowflake url you received in your snowflake registration email_:", "")
     username = st.text_input(
         "Snowflake username (change this is you didn't set it to `admin` at registration):", "admin")
     password = st.text_input("Snowflake Password (it will be visible!):", pw)
