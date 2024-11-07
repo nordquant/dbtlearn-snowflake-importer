@@ -112,7 +112,7 @@ def main():
     username = st.text_input(
         "Snowflake username (change this is you didn't set it to `admin` at registration):", "admin")
     password = st.text_input(
-        "Snowflake Password (it will be visible!):", pw, type="password")
+        "Snowflake Password:", pw, type="password")
 
     if st.button("Start Setup"):
         if len(password) == 0:
