@@ -37,7 +37,7 @@ def streamlit_session_id():
     session_id = get_script_run_ctx().session_id
     session_info = runtime._session_mgr.get_session_info(session_id)
     if session_info is None:
-        raise None
+        return "nosession"
     return session_info.session.id
 
 
