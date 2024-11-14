@@ -1,16 +1,14 @@
-from logging import getLogger
 import argparse
+import logging
 import os
 import re
-
-from sqlalchemy import text
-from sqlalchemy.exc import InterfaceError, DatabaseError
-import streamlit as st
-from sqlalchemy import create_engine
-from sqlalchemy.dialects import registry
-import logging
 from collections import OrderedDict
+from logging import getLogger
 
+import streamlit as st
+from sqlalchemy import create_engine, text
+from sqlalchemy.dialects import registry
+from sqlalchemy.exc import DatabaseError, InterfaceError
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 sql_sections = {
@@ -64,7 +62,7 @@ def get_sql_commands(md):
 
 
 hello_msg = """
-# dbt Zero to Hero Snowflake Importer (beta)
+# dbt Zero to Hero Snowflake Importer (beta 2)
 
 Hi,
 
@@ -154,6 +152,17 @@ def main():
                         else:
                             st.write(f"Executing command: `{command}`")
                         connection.execute(text(command))
+                        connection.commit()
+            for table in ["RAW_LISTINGS", "RAW_HOSTS", "RAW_REVIEWS"]:
+                with st.status(f"Checking if data was imported for table {table} correctly"):
+                    result = connection.execute(
+                        text(f"SELECT COUNT(*) FROM {table}"))
+                    count = result.fetchone()[0]
+                    st.write(f"Table {table} has {count} rows")
+                    if count == 0:
+                        st.error(
+                            f"Table {table} has no rows. This is unexpected. Please check the logs and try again.")
+                        return
             st.toast("Setup complete! You can now go back to the course!", icon="🔥")
             st.success(
                 "Setup complete! You can now go back to the course!", icon="🔥")
