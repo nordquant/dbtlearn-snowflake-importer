@@ -1,9 +1,8 @@
-import argparse
 import logging
 import os
-import re
 from collections import OrderedDict
 from logging import getLogger
+from urllib.parse import quote_plus
 
 import streamlit as st
 from sqlalchemy import create_engine, text
@@ -14,14 +13,17 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 sql_sections = {
     "snowflake_setup": "Setting up the dbt User an Roles",
     "snowflake_import": "Importing Raw Tables",
-    "snowflake_reporter": "Creating Reporter Role"
+    "snowflake_reporter": "Creating Reporter Role",
 }
 
 
 def get_snowflake_connection(account, username, password):
+    # URL encode the username and password to handle special characters
+    encoded_username = quote_plus(username)
+    encoded_password = quote_plus(password)
 
     engine = create_engine(
-        f"snowflake://{username}:{password}@{account}/AIRBNB/DEV?warehouse=COMPUTE_WH&role=ACCOUNTADMIN&account_identifier={account}"
+        f"snowflake://{encoded_username}:{encoded_password}@{account}/AIRBNB/DEV?warehouse=COMPUTE_WH&role=ACCOUNTADMIN&account_identifier={account}"
     )
     connection = engine.connect()
 
@@ -31,6 +33,7 @@ def get_snowflake_connection(account, username, password):
 def streamlit_session_id():
     from streamlit.runtime import get_instance
     from streamlit.runtime.scriptrunner import get_script_run_ctx
+
     runtime = get_instance()
     session_id = get_script_run_ctx().session_id
     session_info = runtime._session_mgr.get_session_info(session_id)
@@ -58,7 +61,10 @@ def get_sql_commands(md):
         elif l.startswith("```sql {#"):
             in_named_sql = True
             current_section = l.split("{#")[1].split("}")[0]
-    return {k: [c.strip("\n") for c in v.split(";") if c.strip() != ""] for k, v in commands.items()}
+    return {
+        k: [c.strip("\n") for c in v.split(";") if c.strip() != ""]
+        for k, v in commands.items()
+    }
 
 
 hello_msg = """
@@ -86,7 +92,8 @@ I'd be very happy if you could provide feedback on wether the tool works and how
 logging.root.setLevel(logging.INFO)
 logger = getLogger(__name__)
 logger.Formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 
 def main():
@@ -106,11 +113,13 @@ def main():
     st.markdown(hello_msg)
     hostname = st.text_input(
         "Snowflake account (this looks like as `frgcsyo-ie17820` or `frgcsyo-ie17820.aws`, check your snowlake registration email).\n\n_**This is not your Snowflake username**, but the first part of the snowflake url you received in your snowflake registration email_:",
-        "jdehewj-vmb00970")
+        "jdehewj-vmb00970",
+    )
     username = st.text_input(
-        "Snowflake username (change this is you didn't set it to `admin` at registration):", "admin")
-    password = st.text_input(
-        "Snowflake Password:", pw, type="password")
+        "Snowflake username (change this is you didn't set it to `admin` at registration):",
+        "admin",
+    )
+    password = st.text_input("Snowflake Password:", pw, type="password")
 
     if st.button("Start Setup"):
         if len(password) == 0:
@@ -118,27 +127,30 @@ def main():
             return
         try:
             with st.status("Connecting to Snowflake"):
-                connection = get_snowflake_connection(
-                    hostname, username, password)
+                connection = get_snowflake_connection(hostname, username, password)
         except InterfaceError as e:
             st.error(
                 f"""Error connecting to Snowflake. This usually means that the snowflake account is invalid.
-                Please verify the snowflake account and try again.\n\nOriginal Error: \n\n{e.orig}""")
+                Please verify the snowflake account and try again.\n\nOriginal Error: \n\n{e.orig}"""
+            )
             logging.warning(
-                f"{session_id}: Error connecting to Snowflake. Account: {hostname}, Username: {username}: {e}")
+                f"{session_id}: Error connecting to Snowflake. Account: {hostname}, Username: {username}: {e}"
+            )
             return
         except DatabaseError as e:
             print(e)
             st.error(
-                f"Error connecting to Snowflake. This usually means that the snowflake username or password you provided is not valid. Please correct them and retry by pressing the Start Setup button.\n\nOriginal Error:\n\n{e.orig}")
+                f"Error connecting to Snowflake. This usually means that the snowflake username or password you provided is not valid. Please correct them and retry by pressing the Start Setup button.\n\nOriginal Error:\n\n{e.orig}"
+            )
             logging.warning(
-                f"{session_id}: Error connecting to Snowflake. Account name: {hostname}\n Original Error: {e}")
+                f"{session_id}: Error connecting to Snowflake. Account name: {hostname}\n Original Error: {e}"
+            )
             return
         except Exception as e:
-            st.error(
-                f"Error connecting to Snowflake.\n\nOriginal Error:\n\n{e.orig}")
+            st.error(f"Error connecting to Snowflake.\n\nOriginal Error:\n\n{e.orig}")
             logging.warning(
-                f"{session_id}: Error connecting to Snowflake. Account name: {hostname}\n Original Error: {e}")
+                f"{session_id}: Error connecting to Snowflake. Account name: {hostname}\n Original Error: {e}"
+            )
             return
 
         st.success("Connected to Snowflake successfully!")
@@ -146,7 +158,9 @@ def main():
             for section, commands in sql_commands.items():
                 with st.status(sql_sections[section]):
                     for command in commands:
-                        if command.startswith("GRANT USAGE ON SCHEMA AIRBNB.DEV TO ROLE REPORTER"):
+                        if command.startswith(
+                            "GRANT USAGE ON SCHEMA AIRBNB.DEV TO ROLE REPORTER"
+                        ):
                             command = "GRANT USAGE ON FUTURE SCHEMAS IN DATABASE AIRBNB TO ROLE REPORTER;"
                             st.write(f"Patching Reporter command: `{command}`")
                         else:
@@ -154,23 +168,26 @@ def main():
                         connection.execute(text(command))
                         connection.commit()
             for table in ["RAW_LISTINGS", "RAW_HOSTS", "RAW_REVIEWS"]:
-                with st.status(f"Checking if data was imported for table {table} correctly"):
-                    result = connection.execute(
-                        text(f"SELECT COUNT(*) FROM {table}"))
+                with st.status(
+                    f"Checking if data was imported for table {table} correctly"
+                ):
+                    result = connection.execute(text(f"SELECT COUNT(*) FROM {table}"))
                     count = result.fetchone()[0]
                     st.write(f"Table {table} has {count} rows")
                     if count == 0:
                         st.error(
-                            f"Table {table} has no rows. This is unexpected. Please check the logs and try again.")
+                            f"Table {table} has no rows. This is unexpected. Please check the logs and try again."
+                        )
                         return
             st.toast("Setup complete! You can now go back to the course!", icon="🔥")
-            st.success(
-                "Setup complete! You can now go back to the course!", icon="🔥")
+            st.success("Setup complete! You can now go back to the course!", icon="🔥")
         except Exception as e:
             st.error(
-                f"Error executing command {command}.\n\nOriginal Error:\n\n{e.orig}")
+                f"Error executing command {command}.\n\nOriginal Error:\n\n{e.orig}"
+            )
             logging.warning(
-                f"{session_id}: Error executing command {command}. Account name: {hostname}\n Original Error: {e}")
+                f"{session_id}: Error executing command {command}. Account name: {hostname}\n Original Error: {e}"
+            )
             return
 
 
