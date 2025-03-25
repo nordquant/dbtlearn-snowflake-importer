@@ -26,6 +26,8 @@ CREATE USER IF NOT EXISTS dbt
   DEFAULT_ROLE=TRANSFORM
   DEFAULT_NAMESPACE='AIRBNB.RAW'
   COMMENT='DBT user used for data transformation';
+ALTER USER dbt SET TYPE = LEGACY_SERVICE;
+
 GRANT ROLE TRANSFORM to USER dbt;
 
 -- Create our database and schemas
