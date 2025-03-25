@@ -68,7 +68,7 @@ def get_sql_commands(md):
 
 
 hello_msg = """
-# dbt Zero to Hero Snowflake Importer (beta 2)
+# dbt Zero to Hero Snowflake Importer
 
 Hi,
 
@@ -121,13 +121,15 @@ def main():
     )
     password = st.text_input("Snowflake Password:", pw, type="password")
 
+    st.warning("Snowflake has been rolling out an update gradually which enforces **Multi Factor Authentication (MFA)**. If you have been enrolled to MFA, a text message / push notification will be sent to your DUO Authenticator app after you click _Start Setup_. If this happens, please approve the request and the setup will continue automatically.")
     if st.button("Start Setup"):
         if len(password) == 0:
             st.error("Please provide a password")
             return
         try:
             with st.status("Connecting to Snowflake"):
-                connection = get_snowflake_connection(hostname, username, password)
+                connection = get_snowflake_connection(
+                    hostname, username, password)
         except InterfaceError as e:
             st.error(
                 f"""Error connecting to Snowflake. This usually means that the snowflake account is invalid.
@@ -147,7 +149,8 @@ def main():
             )
             return
         except Exception as e:
-            st.error(f"Error connecting to Snowflake.\n\nOriginal Error:\n\n{e.orig}")
+            st.error(
+                f"Error connecting to Snowflake.\n\nOriginal Error:\n\n{e.orig}")
             logging.warning(
                 f"{session_id}: Error connecting to Snowflake. Account name: {hostname}\n Original Error: {e}"
             )
@@ -171,7 +174,8 @@ def main():
                 with st.status(
                     f"Checking if data was imported for table {table} correctly"
                 ):
-                    result = connection.execute(text(f"SELECT COUNT(*) FROM {table}"))
+                    result = connection.execute(
+                        text(f"SELECT COUNT(*) FROM {table}"))
                     count = result.fetchone()[0]
                     st.write(f"Table {table} has {count} rows")
                     if count == 0:
@@ -180,7 +184,8 @@ def main():
                         )
                         return
             st.toast("Setup complete! You can now go back to the course!", icon="🔥")
-            st.success("Setup complete! You can now go back to the course!", icon="🔥")
+            st.success(
+                "Setup complete! You can now go back to the course!", icon="🔥")
         except Exception as e:
             st.error(
                 f"Error executing command {command}.\n\nOriginal Error:\n\n{e.orig}"
