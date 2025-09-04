@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from collections import OrderedDict
 from logging import getLogger
 from urllib.parse import quote_plus
@@ -15,6 +16,42 @@ sql_sections = {
     "snowflake_import": "Importing Raw Tables",
     "snowflake_reporter": "Creating Reporter Role",
 }
+
+
+def extract_snowflake_account(raw_input):
+    """
+    Extract Snowflake account identifier from various input formats.
+    
+    Examples:
+    - "jdehewj-vmb00970" -> "jdehewj-vmb00970"
+    - "jhkfheg-qb43765.snowflakecomputing.com" -> "jhkfheg-qb43765"
+    - "https://jhkfheg-qb43765.snowflakecomputing.com/console/login" -> "jhkfheg-qb43765"
+    - "jdehewj-vmb00970.aws" -> "jdehewj-vmb00970.aws"
+    - "xxxxxx.aws" -> "xxxxxx.aws"
+    """
+    if not raw_input or raw_input.strip() == "":
+        return raw_input
+    
+    # Remove any leading/trailing whitespace and extra text
+    input_text = raw_input.strip()
+    
+    # Extract from URL if it's a full URL
+    url_match = re.search(r'https?://([^/]+)', input_text)
+    if url_match:
+        input_text = url_match.group(1)
+    
+    # Remove .snowflakecomputing.com suffix if present
+    input_text = re.sub(r'\.snowflakecomputing\.com.*$', '', input_text)
+    
+    # Extract the account identifier pattern
+    # Matches: word-word, word-word.aws, word.aws, or just word
+    account_match = re.match(r'^([a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)?(?:\.aws)?)(?:\..*)?$', input_text)
+    
+    if account_match:
+        return account_match.group(1)
+    
+    # If no pattern matches, return original input (fallback)
+    return raw_input
 
 
 def get_snowflake_connection(account, username, password):
@@ -111,10 +148,15 @@ def main():
         else ""
     )
     st.markdown(hello_msg)
-    hostname = st.text_input(
+    hostname_raw = st.text_input(
         "Snowflake account (this looks like as `frgcsyo-ie17820` or `frgcsyo-ie17820.aws`, check your snowlake registration email).\n\n_**This is not your Snowflake username**, but the first part of the snowflake url you received in your snowflake registration email_:",
-        "jdehewj-vmb00970",
+        "xxxxxx-xxxxxxxx",
     )
+    hostname = extract_snowflake_account(hostname_raw)
+    
+    # Show the extracted account identifier if it's different from the input
+    if hostname != hostname_raw and hostname_raw.strip() != "xxxxxx-xxxxxxxx":
+        st.info(f"Using account identifier: `{hostname}`")
     username = st.text_input(
         "Snowflake username (change this is you didn't set it to `admin` at registration):",
         "admin",
