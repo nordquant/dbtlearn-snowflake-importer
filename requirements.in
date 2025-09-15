@@ -1,7 +1,11 @@
 streamlit
 sqlalchemy
 snowflake-sqlalchemy
+pydantic
+watchdog
+cryptography
 
 black
 flake8
 isort
+pytest

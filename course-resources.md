@@ -1,55 +1,16 @@
 # Introduction and Environment Setup
 
-## Snowflake user creation
-Copy these SQL statements into a Snowflake Worksheet, select all and execute them (i.e. pressing the play button).
-
-If you see a _Grant partially executed: privileges [REFERENCE_USAGE] not granted._ message when you execute `GRANT ALL ON DATABASE AIRBNB to ROLE transform`, that's just an info message and you can ignore it. 
-
-```sql {#snowflake_setup}
--- Use an admin role
-USE ROLE ACCOUNTADMIN;
-
--- Create the `transform` role
-CREATE ROLE IF NOT EXISTS TRANSFORM;
-GRANT ROLE TRANSFORM TO ROLE ACCOUNTADMIN;
-
--- Create the default warehouse if necessary
-CREATE WAREHOUSE IF NOT EXISTS COMPUTE_WH;
-GRANT OPERATE ON WAREHOUSE COMPUTE_WH TO ROLE TRANSFORM;
-
--- Create the `dbt` user and assign to role
-CREATE USER IF NOT EXISTS dbt
-  PASSWORD='dbtPassword123'
-  LOGIN_NAME='dbt'
-  MUST_CHANGE_PASSWORD=FALSE
-  DEFAULT_WAREHOUSE='COMPUTE_WH'
-  DEFAULT_ROLE=TRANSFORM
-  DEFAULT_NAMESPACE='AIRBNB.RAW'
-  COMMENT='DBT user used for data transformation';
-ALTER USER dbt SET TYPE = LEGACY_SERVICE;
-
-GRANT ROLE TRANSFORM to USER dbt;
-
--- Create our database and schemas
-CREATE DATABASE IF NOT EXISTS AIRBNB;
-CREATE SCHEMA IF NOT EXISTS AIRBNB.RAW;
-
--- Set up permissions to role `transform`
-GRANT ALL ON WAREHOUSE COMPUTE_WH TO ROLE TRANSFORM; 
-GRANT ALL ON DATABASE AIRBNB to ROLE TRANSFORM;
-GRANT ALL ON ALL SCHEMAS IN DATABASE AIRBNB to ROLE TRANSFORM;
-GRANT ALL ON FUTURE SCHEMAS IN DATABASE AIRBNB to ROLE TRANSFORM;
-GRANT ALL ON ALL TABLES IN SCHEMA AIRBNB.RAW to ROLE TRANSFORM;
-GRANT ALL ON FUTURE TABLES IN SCHEMA AIRBNB.RAW to ROLE TRANSFORM;
-```
-
 ## Snowflake data import
 
 Copy these SQL statements into a Snowflake Worksheet, select all and execute them (i.e. pressing the play button).
 
 ```sql {#snowflake_import}
 -- Set up the defaults
+CREATE WAREHOUSE IF NOT EXISTS COMPUTE_WH;
 USE WAREHOUSE COMPUTE_WH;
+
+CREATE DATABASE IF NOT EXISTS AIRBNB;
+CREATE SCHEMA IF NOT EXISTS AIRBNB.RAW;
 USE DATABASE airbnb;
 USE SCHEMA RAW;
 
@@ -103,6 +64,70 @@ COPY INTO raw_hosts (id, name, is_superhost, created_at, updated_at)
                    from 's3://dbtlearn/hosts.csv'
                     FILE_FORMAT = (type = 'CSV' skip_header = 1
                     FIELD_OPTIONALLY_ENCLOSED_BY = '"');
+```
+
+## Snowflake user creation
+Copy these SQL statements into a Snowflake Worksheet, select all and execute them (i.e. pressing the play button).
+
+If you see a _Grant partially executed: privileges [REFERENCE_USAGE] not granted._ message when you execute `GRANT ALL ON DATABASE AIRBNB to ROLE transform`, that's just an info message and you can ignore it. 
+
+```sql {#snowflake_setup}
+-- Use an admin role
+USE ROLE ACCOUNTADMIN;
+
+-- Create the `transform` role
+DROP ROLE IF EXISTS TRANSFORM;
+CREATE ROLE TRANSFORM;
+GRANT ROLE TRANSFORM TO ROLE ACCOUNTADMIN;
+
+-- Create the default warehouse if necessary
+GRANT OPERATE ON WAREHOUSE COMPUTE_WH TO ROLE TRANSFORM;
+
+-- Create the `dbt` user and assign to role
+DROP USER IF EXISTS dbt;
+CREATE USER IF NOT EXISTS dbt
+  LOGIN_NAME='dbt'
+  TYPE=SERVICE
+  RSA_PUBLIC_KEY="<<Add Your Public Key File's content here>>"
+  DEFAULT_ROLE=TRANSFORM
+  DEFAULT_WAREHOUSE='COMPUTE_WH'
+  DEFAULT_NAMESPACE='AIRBNB.RAW'
+  COMMENT='DBT user used for data transformation';
+
+GRANT ROLE TRANSFORM to USER dbt;
+
+-- Set up permissions to role `transform`
+GRANT ALL ON WAREHOUSE COMPUTE_WH TO ROLE TRANSFORM; 
+GRANT ALL ON DATABASE AIRBNB to ROLE TRANSFORM;
+GRANT ALL ON ALL SCHEMAS IN DATABASE AIRBNB to ROLE TRANSFORM;
+GRANT ALL ON FUTURE SCHEMAS IN DATABASE AIRBNB to ROLE TRANSFORM;
+GRANT ALL ON ALL TABLES IN SCHEMA AIRBNB.RAW to ROLE TRANSFORM;
+GRANT ALL ON FUTURE TABLES IN SCHEMA AIRBNB.RAW to ROLE TRANSFORM;
+
+-- Create the user and permissions for Preset.io
+USE ROLE ACCOUNTADMIN;
+
+DROP ROLE IF EXISTS REPORTER;
+CREATE ROLE REPORTER;
+
+DROP USER IF EXISTS PRESET;
+CREATE USER PRESET
+  LOGIN_NAME='preset'
+  TYPE=SERVICE
+  RSA_PUBLIC_KEY="<<Add Your Public Key File's content here>>"
+  DEFAULT_WAREHOUSE='COMPUTE_WH'
+  DEFAULT_ROLE=REPORTER
+  DEFAULT_NAMESPACE='AIRBNB.DEV'
+ COMMENT='Preset user for creating reports';
+
+GRANT ROLE REPORTER TO USER PRESET;
+GRANT ROLE REPORTER TO ROLE ACCOUNTADMIN;
+GRANT ALL ON WAREHOUSE COMPUTE_WH TO ROLE REPORTER;
+GRANT USAGE ON DATABASE AIRBNB TO ROLE REPORTER;
+GRANT USAGE ON ALL SCHEMAS IN DATABASE AIRBNB to ROLE REPORTER;
+GRANT USAGE ON FUTURE SCHEMAS IN DATABASE AIRBNB to ROLE REPORTER;
+GRANT SELECT ON ALL TABLES IN SCHEMA AIRBNB.RAW to ROLE REPORTER;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA AIRBNB.RAW to ROLE REPORTER;
 ```
 
 # Python and Virtualenv setup, and dbt installation - Windows
@@ -747,33 +772,6 @@ Here is the schema of our input data:
 ```
 
 # Analyses, Hooks and Exposures
-
-## Create the REPORTER role and PRESET user in Snowflake
-```sql {#snowflake_reporter}
-USE ROLE ACCOUNTADMIN;
-CREATE ROLE IF NOT EXISTS REPORTER;
-CREATE USER IF NOT EXISTS PRESET
- PASSWORD='presetPassword123'
- LOGIN_NAME='preset'
- MUST_CHANGE_PASSWORD=FALSE
- DEFAULT_WAREHOUSE='COMPUTE_WH'
- DEFAULT_ROLE=REPORTER
- DEFAULT_NAMESPACE='AIRBNB.DEV'
- COMMENT='Preset user for creating reports';
-
-GRANT ROLE REPORTER TO USER PRESET;
-GRANT ROLE REPORTER TO ROLE ACCOUNTADMIN;
-GRANT ALL ON WAREHOUSE COMPUTE_WH TO ROLE REPORTER;
-GRANT USAGE ON DATABASE AIRBNB TO ROLE REPORTER;
-GRANT USAGE ON SCHEMA AIRBNB.DEV TO ROLE REPORTER;
-
--- We don't want to grant select rights here; we'll do this through hooks:
--- GRANT SELECT ON ALL TABLES IN SCHEMA AIRBNB.DEV TO ROLE REPORTER;
--- GRANT SELECT ON ALL VIEWS IN SCHEMA AIRBNB.DEV TO ROLE REPORTER;
--- GRANT SELECT ON FUTURE TABLES IN SCHEMA AIRBNB.DEV TO ROLE REPORTER;
--- GRANT SELECT ON FUTURE VIEWS IN SCHEMA AIRBNB.DEV TO ROLE REPORTER;
-
-```
 
 ## Analyses
 The contents of `analyses/full_moon_no_sleep.sql`:
