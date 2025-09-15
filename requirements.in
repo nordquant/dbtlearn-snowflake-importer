@@ -4,6 +4,7 @@ snowflake-sqlalchemy
 pydantic
 watchdog
 cryptography
+pyyaml
 
 black
 flake8
