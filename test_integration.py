@@ -79,13 +79,13 @@ def test_app_integration():
                         print(
                             f"    ❌ Public key substitution failed in: {cmd[:50]}..."
                         )
-                        return False
+                        assert False
 
         print("✅ Integration test passed!")
-        return True
+        assert True
     else:
         print(f"❌ Course resources file not found: {course_resources_path}")
-        return False
+        assert False
 
 
 if __name__ == "__main__":

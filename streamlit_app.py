@@ -207,7 +207,6 @@ def main():
     if "step" not in st.session_state:
         st.session_state.step = 0
 
-    st.text(f"Step: {st.session_state.step}")
     # Landing Page
     if st.session_state.step == 0:
         st.markdown(hello_msg)
