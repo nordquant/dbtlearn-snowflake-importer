@@ -175,20 +175,17 @@ hello_msg = """
 
 Hi,
 
-this webapp helps you set up your Snowflake account
-and import the course resources, such as raw tables and user roles
-into your Snowflake account. Simply add the snowflake hostname, username and password
-and then click start setup.
+this webapp helps you getting started with dbt, Snowflake and the Preset, the BI tool we'll use in the course.
 
-**This app will do the following**:
+**We'll do the following**:
 
-* Create the `dbt` user using the password `dbtPassword123`
-* Import the raw AirBnB tables
-* Create the REPORTER role and grant it to the `dbt` user. _We'll use this role later in the course when we build a dashboard.
+* Step 1) Key Generation - Snowflake requires a key-based authentication, we'll generate a keypair for you that you can use then to connect to Snowflake.
+* Step 2) Snowflake Setup - We'll set up your Snowflake account and import the raw AirBnB tables.
+* Step 3) Configuration Files - We'll download the configuration files needed for your dbt project and Preset.
 
-Please keep in mind that this is a beta version implemented in late October 2024 and it may have some rought edges.
-I'd be very happy if you could provide feedback on wether the tool works and how to improve it. Just send me a message on Udemy.
+I'd be very happy if you could provide feedback on this tool; just send me a message on Udemy.
 
+On with the setup!
 """
 
 
@@ -217,7 +214,7 @@ def main():
 
     # Step 1: Keypair Generation
     elif st.session_state.step == 1:
-        st.markdown("### Step 1: Generate Snowflake Access Keys")
+        st.markdown("### ➡️ Step 1: Generate Snowflake Access Keys")
         st.markdown(
             "First, we need to generate RSA keypair files for secure authentication with Snowflake."
         )
@@ -231,7 +228,9 @@ def main():
                 st.session_state.keypair = generate_keys("q")
         keypair = st.session_state.keypair
         st.success("✅ Keypair files generated successfully!")
-        st.info("Save these two files and keep them safe and accessible for later.")
+        st.info(
+            "Save these two files and keep them safe and accessible for later. Then, click the button below to continue to the Snowflake Setup."
+        )
 
         st.download_button(
             label="Download Private Key (rsa_key.p8)",
@@ -255,7 +254,7 @@ def main():
     elif st.session_state.step == 2:
         snowflake_setup_complete = False
         st.markdown("### ✅ Step 1: Generate Snowflake Access Keys - Completed")
-        st.markdown("### Step 2: Snowflake Setup")
+        st.markdown("### ➡️ Step 2: Snowflake Setup")
 
         # Add back button
         if st.button("← Back to Access Keys Generation"):
@@ -445,8 +444,9 @@ def main():
 
     # Step 3: Download Configuration Files
     elif st.session_state.step == 3:
+        st.markdown("### ✅ Step 1: Generate Snowflake Access Keys - Completed")
         st.markdown("### ✅ Step 2: Snowflake Setup - Completed")
-        st.markdown("### Step 3: Download Configuration Files")
+        st.markdown("### ➡️ Step 3: Download Configuration Files")
 
         # Add back button
         if st.button("← Back to Snowflake Setup", type="secondary"):
@@ -454,7 +454,9 @@ def main():
             st.rerun()
 
         st.markdown(
-            "Download the configuration files needed for dbt and Preset integration."
+            """Download the configuration files needed for dbt and Preset integration.
+               * `profiles.yml` - contains your dbt connection configuration which you'll need to copy to your dbt project folder later.
+               * `preset-instructions.md` - contains instructions for connecting to Preset, which we'll cover later in the course."""
         )
 
         # Get the keypair and account info from session state
@@ -506,6 +508,11 @@ def main():
         st.info(
             "You can now use these files to configure dbt and Preset with "
             "your Snowflake database."
+        )
+
+        st.toast("Configuration files ready for download!", icon="🔥")
+        st.success(
+            "Once you downloaded the files, you can go back to the course and continue with the setup!"
         )
 
 
