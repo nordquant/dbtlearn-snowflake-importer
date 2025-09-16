@@ -170,22 +170,22 @@ def get_sql_commands(md, public_key=None):
 
 
 hello_msg = """
-# The Complete dbt (Data Build Tool) Bootcamp: Zero to Hero
-## Snowflake and Profile Setup Helper
+# 🚀 The Complete dbt (Data Build Tool) Bootcamp: Zero to Hero
+## ❄️ Snowflake and Profile Setup Helper
 
-Hi,
+Hi there! 👋
 
-this webapp helps you getting started with dbt, Snowflake and the Preset, the BI tool we'll use in the course.
+This webapp helps you getting started with dbt, Snowflake and Preset, the BI tool we'll use in the course.
 
 **We'll do the following**:
 
-* Step 1) Key Generation - Snowflake requires a key-based authentication, we'll generate a keypair for you that you can use then to connect to Snowflake.
-* Step 2) Snowflake Setup - We'll set up your Snowflake account and import the raw AirBnB tables.
-* Step 3) Configuration Files - We'll download the configuration files needed for your dbt project and Preset.
+* **Step 1)** Key Generation - Snowflake requires a key-based authentication, we'll generate a keypair for you that you can use then to connect to Snowflake.
+* **Step 2)** Snowflake Setup - We'll set up your Snowflake account and import the raw AirBnB tables.
+* **Step 3)** Configuration Files - We'll download the configuration files needed for your dbt project and Preset.
 
-I'd be very happy if you could provide feedback on this tool; just send me a message on Udemy.
+I'd be very happy if you could provide feedback on this tool; just send me a message on Udemy. 💬
 
-On with the setup!
+On with the setup! 🎉
 """
 
 
@@ -208,45 +208,45 @@ def main():
     if st.session_state.step == 0:
         st.markdown(hello_msg)
 
-        if st.button("→ Start Setup Process", type="primary", use_container_width=True):
+        if st.button(
+            "🚀 Start Setup Process", type="primary", use_container_width=True
+        ):
             st.session_state.step = 1
             st.rerun()
 
     # Step 1: Keypair Generation
     elif st.session_state.step == 1:
-        st.markdown("### ➡️ Step 1: Generate Snowflake Access Keys")
-        st.markdown(
-            "First, we need to generate RSA keypair files for secure authentication with Snowflake."
-        )
+        st.markdown("### 🔐 Step 1: Generate Snowflake Access Keys")
 
-        if st.button("← Back to Welcome", type="secondary"):
+        if st.button("⬅️ Back to Welcome", type="secondary"):
             st.session_state.step = 0
             st.rerun()
 
         if "keypair" not in st.session_state:
             with st.status("Generating keypair..."):
                 st.session_state.keypair = generate_keys("q")
+                st.markdown(" ✅ Private Key (rsa_key.p8)")
+                st.markdown(" ✅ Public Key (rsa_key.pub)")
         keypair = st.session_state.keypair
-        st.success("✅ Keypair files generated successfully!")
         st.info(
-            "Save these two files and keep them safe and accessible for later. Then, click the button below to continue to the Snowflake Setup."
+            "Keypair files generated successfully!\n\n💾 Save these two files below and keep them safe and accessible for later. Then, click the button below to continue to the Snowflake Setup."
         )
 
         st.download_button(
-            label="Download Private Key (rsa_key.p8)",
+            label="🔑 Download Private Key (rsa_key.p8)",
             data=keypair.private_key,
             file_name="rsa_key.p8",
             mime="text/plain",
         )
 
         st.download_button(
-            label="Download Public Key (rsa_key.pub)",
+            label="🔐 Download Public Key (rsa_key.pub)",
             data=keypair.public_key,
             file_name="rsa_key.pub",
             mime="text/plain",
         )
 
-        if st.button("→ Continue to Snowflake Setup", type="primary"):
+        if st.button("➡️ Continue to Snowflake Setup", type="primary"):
             st.session_state.step = 2
             st.rerun()
 
@@ -254,10 +254,10 @@ def main():
     elif st.session_state.step == 2:
         snowflake_setup_complete = False
         st.markdown("### ✅ Step 1: Generate Snowflake Access Keys - Completed")
-        st.markdown("### ➡️ Step 2: Snowflake Setup")
+        st.markdown("### ❄️ Step 2: Snowflake Setup")
 
         # Add back button
-        if st.button("← Back to Access Keys Generation"):
+        if st.button("⬅️ Back to Access Keys Generation"):
             st.session_state.step = 1
             st.rerun()
 
@@ -266,6 +266,10 @@ def main():
             os.environ.get("SNOWFLAKE_PASSWORD")
             if os.environ.get("SNOWFLAKE_PASSWORD")
             else ""
+        )
+
+        st.info(
+            "Now let's add your Snowflake Account name and Admin Credentials so we can set up the permissions and the datasets for you."
         )
         hostname_raw = st.text_input(
             "Snowflake account (this looks like as `frgcsyo-ie17820` or `frgcsyo-ie17820.aws`, check your snowlake registration email).\n\n_**This is not your Snowflake username**, but the first part of the snowflake url you received in your snowflake registration email_. You can also paste the full url from the registration email:",
@@ -296,9 +300,9 @@ def main():
         st.warning(
             "Snowflake has been rolling out an update gradually which enforces **Multi Factor Authentication (MFA)**. If you have been enrolled to MFA, a text message / push notification will be sent to your DUO Authenticator app after you click _Start Setup_. If this happens, please approve the request and the setup will continue automatically."
         )
-        if st.button("Start Setup"):
+        if st.button("🎯 Start Setup"):
             if len(password) == 0:
-                st.error("Please provide a password")
+                st.error("🚨 Please provide a password")
                 return
 
             # Load and process SQL commands with public key substitution
@@ -310,7 +314,7 @@ def main():
                 print(sql_commands)
 
             try:
-                with st.status("Connecting to Snowflake"):
+                with st.status("🔌 Connecting to Snowflake"):
                     connection = get_snowflake_connection(hostname, username, password)
             except InterfaceError as e:
                 st.error(
@@ -340,7 +344,9 @@ def main():
                 )
                 return
 
-            with st.status(f"Setting up your Snowflake account") as status_spinner:
+            with st.status(
+                f"⚙️ Setting up your Snowflake account (this can take up to 2 minutes)"
+            ) as status_spinner:
                 try:
                     for section, commands in sql_commands.items():
                         with st.status(
@@ -433,40 +439,41 @@ def main():
                         expanded=True,
                     )
 
-            if snowflake_setup_complete:
-                success_msg = "Snowflake Setup complete! Let's continue with downloading the configuration files!"
-                st.toast(success_msg, icon="🔥")
-                status_spinner.success(success_msg, icon="🔥")
+        if snowflake_setup_complete:
+            success_msg = "🎉 Snowflake Setup complete! Let's continue with downloading the configuration files!"
+            st.toast(success_msg, icon="🔥")
+            status_spinner.success(success_msg, icon="🔥")
 
-                st.session_state.step = 3
-                if st.button("→ Download Configuration Files", type="primary"):
-                    st.rerun()
+            st.session_state.step = 3
+            if st.button("📥 Download Configuration Files", type="primary"):
+                st.rerun()
 
     # Step 3: Download Configuration Files
     elif st.session_state.step == 3:
         st.markdown("### ✅ Step 1: Generate Snowflake Access Keys - Completed")
         st.markdown("### ✅ Step 2: Snowflake Setup - Completed")
-        st.markdown("### ➡️ Step 3: Download Configuration Files")
+        st.markdown("### 📄 Step 3: Download Configuration Files")
 
         # Add back button
-        if st.button("← Back to Snowflake Setup", type="secondary"):
+        if st.button("⬅️ Back to Snowflake Setup", type="secondary"):
             st.session_state.step = 2
             st.rerun()
 
         st.markdown(
             """Download the configuration files needed for dbt and Preset integration.
-               * `profiles.yml` - contains your dbt connection configuration which you'll need to copy to your dbt project folder later.
-               * `preset-instructions.md` - contains instructions for connecting to Preset, which we'll cover later in the course."""
+
+ * `profiles.yml`: contains your dbt connection configuration which you'll need to copy to your dbt project folder later.
+ * `preset-instructions.md`: contains instructions for connecting to Preset, which we'll cover later in the course."""
         )
 
         # Get the keypair and account info from session state
         if "keypair" not in st.session_state:
-            st.error("No keypair found. Please go back and generate keys first.")
+            st.error("🚨 No keypair found. Please go back and generate keys first.")
             return
 
         if "snowflake_account" not in st.session_state:
             st.error(
-                "No Snowflake account found. Please go back and complete "
+                "🚨 No Snowflake account found. Please go back and complete "
                 "Snowflake setup first."
             )
             return
@@ -485,34 +492,34 @@ def main():
         col1, col2 = st.columns(2)
 
         with col1:
-            st.markdown("#### dbt profiles.yml")
+            st.markdown("#### 🛠️ dbt profiles.yml")
             st.markdown("This file contains your dbt connection configuration.")
             st.download_button(
-                label="Download profiles.yml",
+                label="📥 Download profiles.yml",
                 data=profiles_content,
                 file_name="profiles.yml",
                 mime="text/yaml",
             )
 
         with col2:
-            st.markdown("#### Preset Instructions")
+            st.markdown("#### 📋 Preset Instructions")
             st.markdown("This file contains instructions for connecting to Preset.")
             st.download_button(
-                label="Download preset-instructions.md",
+                label="📥 Download preset-instructions.md",
                 data=preset_content,
                 file_name="preset-instructions.md",
                 mime="text/markdown",
             )
 
-        st.success("✅ Configuration files ready for download!")
+        st.success("🎉 Configuration files ready for download!")
         st.info(
-            "You can now use these files to configure dbt and Preset with "
+            "🎯 You can now use these files to configure dbt and Preset with "
             "your Snowflake database."
         )
 
         st.toast("Configuration files ready for download!", icon="🔥")
         st.success(
-            "Once you downloaded the files, you can go back to the course and continue with the setup!"
+            "🎓 Once you downloaded the files, you can go back to the course and continue with the setup!"
         )
 
 
