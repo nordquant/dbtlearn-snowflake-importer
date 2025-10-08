@@ -35,7 +35,7 @@ COPY INTO raw_listings (id,
                         price,
                         created_at,
                         updated_at)
-                   from 's3://dbtlearn/listings.csv'
+                   from 's3://dbt-datasets/listings.csv'
                     FILE_FORMAT = (type = 'CSV' skip_header = 1
                     FIELD_OPTIONALLY_ENCLOSED_BY = '"');
                     
@@ -48,7 +48,7 @@ CREATE OR REPLACE TABLE raw_reviews
                      sentiment string);
                     
 COPY INTO raw_reviews (listing_id, date, reviewer_name, comments, sentiment)
-                   from 's3://dbtlearn/reviews.csv'
+                   from 's3://dbt-datasets/reviews.csv'
                     FILE_FORMAT = (type = 'CSV' skip_header = 1
                     FIELD_OPTIONALLY_ENCLOSED_BY = '"');
                     
@@ -61,7 +61,7 @@ CREATE OR REPLACE TABLE raw_hosts
                      updated_at datetime);
                     
 COPY INTO raw_hosts (id, name, is_superhost, created_at, updated_at)
-                   from 's3://dbtlearn/hosts.csv'
+                   from 's3://dbt-datasets/hosts.csv'
                     FILE_FORMAT = (type = 'CSV' skip_header = 1
                     FIELD_OPTIONALLY_ENCLOSED_BY = '"');
 ```
@@ -128,6 +128,9 @@ GRANT USAGE ON ALL SCHEMAS IN DATABASE AIRBNB to ROLE REPORTER;
 GRANT USAGE ON FUTURE SCHEMAS IN DATABASE AIRBNB to ROLE REPORTER;
 GRANT SELECT ON ALL TABLES IN SCHEMA AIRBNB.RAW to ROLE REPORTER;
 GRANT SELECT ON FUTURE TABLES IN SCHEMA AIRBNB.RAW to ROLE REPORTER;
+GRANT SELECT ON ALL TABLES IN SCHEMA AIRBNB.DEV to ROLE REPORTER;
+GRANT SELECT ON FUTURE TABLES IN SCHEMA AIRBNB.DEV to ROLE REPORTER;
+
 ```
 
 # Python and Virtualenv setup, and dbt installation - Windows
