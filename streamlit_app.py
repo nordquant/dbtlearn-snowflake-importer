@@ -7,12 +7,13 @@ from urllib.parse import quote_plus
 
 import streamlit as st
 import yaml
-from core.keys import generate_keys
-from core.snowflake import extract_snowflake_account, is_valid_snowflake_account
 from cryptography.hazmat.primitives import serialization
 from sqlalchemy import create_engine, text
 from sqlalchemy.dialects import registry
 from sqlalchemy.exc import DatabaseError, InterfaceError
+
+from core.keys import generate_keys
+from core.snowflake import extract_snowflake_account, is_valid_snowflake_account
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 sql_sections = {
@@ -388,7 +389,10 @@ def main():
 
                 try:
                     private_key_pem = st.session_state.keypair.private_key
-                    for users in [("dbt", "TRANSFORM"), ("preset", "REPORTER")]:
+                    for users in [
+                        ("dbt", "TRANSFORM", "RAW"),
+                        ("preset", "REPORTER", "DEV"),
+                    ]:
                         with st.status(
                             f"Verifying connection with {users[0]} user"
                         ) as internal_status_spinner:
@@ -402,12 +406,15 @@ def main():
                             dbt_result = dbt_connection.execute(
                                 text(f"USE DATABASE AIRBNB")
                             )
-                            dbt_result = dbt_connection.execute(text(f"USE SCHEMA RAW"))
+                            dbt_result = dbt_connection.execute(
+                                text(f"USE SCHEMA {users[2]}")
+                            )
 
-                            # Query RAW_LISTINGS table using dbt user
-                            query = "SELECT * FROM RAW.RAW_LISTINGS"
-                            dbt_result = dbt_connection.execute(text(query))
-                            dbt_result.fetchone()
+                            if users[0] == "dbt":
+                                # Query RAW_LISTINGS table using dbt user
+                                query = "SELECT * FROM RAW.RAW_LISTINGS"
+                                dbt_result = dbt_connection.execute(text(query))
+                                dbt_result.fetchone()
 
                             dbt_connection.close()
                             internal_status_spinner.success(
