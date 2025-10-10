@@ -1,4 +1,4 @@
-dbtlearn:
+airbnb:
   outputs:
     dev:
       type: snowflake
