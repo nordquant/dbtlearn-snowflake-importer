@@ -143,4 +143,4 @@ This project is part of the dbt Zero to Hero Udemy course materials.
 For issues or questions about:
 - **The application**: Check the logs in the Streamlit interface
 - **Docker deployment**: See [DOCKER.md](DOCKER.md)
-- **The dbt course**: Refer to the Udemy course materials
+- **The dbt course**: Refer to the Udemy course materials# Test change for manual workflow trigger
