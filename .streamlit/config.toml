@@ -1,0 +1,17 @@
+[server]
+# Streamlit Cloud compatible settings
+port = 8501
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+runOnSave = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+# Optional: You can customize the theme here
+primaryColor = "#FF6B6B"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"

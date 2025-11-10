@@ -1,0 +1,16 @@
+airbnb:
+  outputs:
+    dev:
+      type: snowflake
+      account: {{snowflake_account}}
+      user: dbt
+
+      role: TRANSFORM
+      private_key: "{{private_key_pem_text}}"
+      private_key_passphrase: q
+
+      database: AIRBNB
+      schema: DEV
+      threads: 1
+      warehouse: COMPUTE_WH
+  target: dev
