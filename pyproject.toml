@@ -1,0 +1,24 @@
+[project]
+name = "dbtlearn-snowflake-importer"
+version = "0.1.0"
+description = "Streamlit app to help students set up Snowflake for dbt Zero to Hero course"
+requires-python = "==3.13.*"
+dependencies = [
+    "streamlit>=1.51,<1.52",
+    "sqlalchemy>=2.0,<2.1",
+    "snowflake-sqlalchemy>=1.7,<1.8",
+    "snowflake-connector-python>=3.18,<3.19",
+    "pydantic>=2.12,<2.13",
+    "watchdog>=6.0,<6.1",
+    "cryptography>=46.0,<46.1",
+    "pyyaml>=6.0,<6.1",
+    "urllib3>=2.5,<2.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=25.9,<25.10",
+    "flake8>=7.3,<7.4",
+    "isort>=7.0,<7.1",
+    "pytest>=9.0,<9.1",
+]
