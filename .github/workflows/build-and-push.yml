@@ -35,6 +35,14 @@ jobs:
             image=moby/buildkit:latest
             network=host
 
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
       - name: Log in to Registry
         uses: docker/login-action@v3
         with:
@@ -51,9 +59,10 @@ jobs:
           load: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test
           cache-from: |
+            type=local,src=/tmp/.buildx-cache
             type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          cache-to: type=inline
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
 
       - name: Test Docker image
         run: |
@@ -104,9 +113,15 @@ jobs:
           build-args: |
             GIT_COMMIT=${{ github.sha }}
           cache-from: |
+            type=local,src=/tmp/.buildx-cache-new
             type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
             type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
       - name: Image pushed successfully
         run: |
