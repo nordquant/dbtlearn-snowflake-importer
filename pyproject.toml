@@ -23,3 +23,8 @@ dev = [
     "pytest>=9.0,<9.1",
     "python-dotenv>=1.0,<2.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest-timeout>=2.4.0",
+]
