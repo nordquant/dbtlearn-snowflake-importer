@@ -39,6 +39,7 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: 22
           timeout: 20m
+          command_timeout: 20m
           envs: DRAIN_TIMEOUT,REGISTRY_USERNAME,REGISTRY_PASSWORD,REGISTRY
           script: |
             set -e
