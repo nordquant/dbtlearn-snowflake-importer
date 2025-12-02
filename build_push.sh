@@ -142,6 +142,7 @@ else
         "buildx"
         "build"
         "--platform" "${PLATFORMS}"
+        "--build-arg" "GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
         "-t" "${FULL_IMAGE_NAME}"
     )
 

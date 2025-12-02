@@ -15,8 +15,10 @@ from sqlalchemy.exc import DatabaseError, InterfaceError
 
 from core.keys import generate_keys
 from core.snowflake import extract_snowflake_account, is_valid_snowflake_account
+from datetime import datetime, timezone
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+APP_START_TIME = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 sql_sections = {
     "snowflake_setup": "Setting up the dbt User an Roles",
     "snowflake_import": "Importing Raw Tables",
@@ -213,6 +215,20 @@ logger = getLogger(__name__)
 logger.Formatter = logging.Formatter(
     "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
 )
+
+
+GITHUB_REPO_URL = "https://github.com/nordquant/dbtlearn-snowflake-importer"
+
+
+def get_build_info() -> str:
+    """Get build info for footer display."""
+    commit_full = os.environ.get("GIT_COMMIT", "local")
+    commit_short = commit_full[:7]
+    if commit_full not in ("local", "unknown"):
+        commit_link = f'<a href="{GITHUB_REPO_URL}/commit/{commit_full}" target="_blank" style="color: #888;">{commit_short}</a>'
+    else:
+        commit_link = commit_short
+    return f"commit: {commit_link} | started: {APP_START_TIME} UTC"
 
 
 def main():
@@ -573,6 +589,14 @@ def main():
         st.success(
             "🎓 Once you downloaded the files, you can go back to the course and continue with the setup!"
         )
+
+    # Development info footer
+    st.markdown(
+        f"<div style='position: fixed; bottom: 0; right: 0; padding: 4px 8px; "
+        f"font-size: 10px; color: #888; background: rgba(255,255,255,0.9);'>"
+        f"{get_build_info()}</div>",
+        unsafe_allow_html=True,
+    )
 
 
 if __name__ == "__main__":
