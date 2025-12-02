@@ -1,0 +1,56 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      drain_timeout:
+        description: 'Drain timeout in seconds (default: 600 = 10 minutes for production)'
+        required: false
+        default: '600'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dbt-bootcamp-setup
+  cancel-in-progress: false
+
+env:
+  REGISTRY: registry.nordquant.com
+  IMAGE_NAME: dbt-bootcamp-setup
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to production server
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DRAIN_TIMEOUT: ${{ inputs.drain_timeout || '600' }}
+          REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+          REGISTRY: ${{ env.REGISTRY }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 22
+          timeout: 20m
+          envs: DRAIN_TIMEOUT,REGISTRY_USERNAME,REGISTRY_PASSWORD,REGISTRY
+          script: |
+            set -e
+            cd /home/zoltanctoth/base-infra
+
+            echo "Logging into Docker registry..."
+            echo "$REGISTRY_PASSWORD" | docker login $REGISTRY -u $REGISTRY_USERNAME --password-stdin
+
+            echo "Pulling latest image..."
+            docker compose pull dbt-bootcamp-setup
+
+            echo "Starting zero-downtime deployment (drain timeout: ${DRAIN_TIMEOUT}s)..."
+            ./scripts/redeploy_dbtsetup.sh
+
+            echo "Deployment completed successfully!"

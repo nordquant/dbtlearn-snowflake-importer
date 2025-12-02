@@ -2,6 +2,7 @@ import logging
 import os
 import traceback
 from collections import OrderedDict
+from contextlib import contextmanager
 from logging import getLogger
 from urllib.parse import quote_plus
 
@@ -72,6 +73,7 @@ snowflake://preset@{snowflake_account}/AIRBNB?role=REPORTER&warehouse=COMPUTE_WH
     return content
 
 
+@contextmanager
 def get_snowflake_connection(account, username, password):
     # URL encode the username and password to handle special characters
     encoded_username = quote_plus(username)
@@ -82,9 +84,14 @@ def get_snowflake_connection(account, username, password):
     engine = create_engine(connection_string)
     connection = engine.connect()
 
-    return connection
+    try:
+        yield connection
+    finally:
+        connection.close()
+        engine.dispose()
 
 
+@contextmanager
 def get_dbt_connection(account, login_name, role, private_key_pem):
     """Connect to Snowflake using dbt user with private key authentication."""
 
@@ -124,19 +131,30 @@ def get_dbt_connection(account, login_name, role, private_key_pem):
     )
     connection = engine.connect()
 
-    return connection
+    try:
+        yield connection
+    finally:
+        connection.close()
+        engine.dispose()
 
 
 def streamlit_session_id():
-    from streamlit.runtime import get_instance
-    from streamlit.runtime.scriptrunner import get_script_run_ctx
+    try:
+        from streamlit.runtime import get_instance
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-    runtime = get_instance()
-    session_id = get_script_run_ctx().session_id
-    session_info = runtime._session_mgr.get_session_info(session_id)
-    if session_info is None:
-        return "nosession"
-    return session_info.session.id
+        runtime = get_instance()
+        ctx = get_script_run_ctx()
+        if ctx is None:
+            return "nosession"
+        session_id = ctx.session_id
+        session_info = runtime._session_mgr.get_session_info(session_id)
+        if session_info is None:
+            return "nosession"
+        return session_info.session.id
+    except (AttributeError, TypeError):
+        # Running in test environment (AppTest) where runtime is mocked
+        return "test-session"
 
 
 @st.cache_data
@@ -210,7 +228,10 @@ def main():
         st.markdown(hello_msg)
 
         if st.button(
-            "🚀 Start Setup Process", type="primary", use_container_width=True
+            "🚀 Start Setup Process",
+            type="primary",
+            use_container_width=True,
+            key="btn_start_setup",
         ):
             st.session_state.step = 1
             st.rerun()
@@ -219,7 +240,7 @@ def main():
     elif st.session_state.step == 1:
         st.markdown("### 🔐 Step 1: Generate Snowflake Access Keys")
 
-        if st.button("⬅️ Back to Welcome", type="secondary"):
+        if st.button("⬅️ Back to Welcome", type="secondary", key="btn_back_to_welcome"):
             st.session_state.step = 0
             st.rerun()
 
@@ -238,6 +259,7 @@ def main():
             data=keypair.private_key,
             file_name="rsa_key.p8",
             mime="text/plain",
+            key="btn_download_private_key",
         )
 
         st.download_button(
@@ -245,9 +267,12 @@ def main():
             data=keypair.public_key,
             file_name="rsa_key.pub",
             mime="text/plain",
+            key="btn_download_public_key",
         )
 
-        if st.button("➡️ Continue to Snowflake Setup", type="primary"):
+        if st.button(
+            "➡️ Continue to Snowflake Setup", type="primary", key="btn_continue_to_snowflake"
+        ):
             st.session_state.step = 2
             st.rerun()
 
@@ -258,23 +283,26 @@ def main():
         st.markdown("### ❄️ Step 2: Snowflake Setup")
 
         # Add back button
-        if st.button("⬅️ Back to Access Keys Generation"):
+        if st.button(
+            "⬅️ Back to Access Keys Generation", key="btn_back_to_keys"
+        ):
             st.session_state.step = 1
             st.rerun()
 
         registry.register("snowflake", "snowflake.sqlalchemy", "dialect")
-        pw = (
-            os.environ.get("SNOWFLAKE_PASSWORD")
-            if os.environ.get("SNOWFLAKE_PASSWORD")
-            else ""
-        )
+
+        # Check environment for credentials (priority: env vars, then defaults)
+        env_account = os.environ.get("SNOWFLAKE_ACCOUNT", "xxxxxx-xxxxxxxx")
+        env_username = os.environ.get("SNOWFLAKE_USERNAME", "admin")
+        env_password = os.environ.get("SNOWFLAKE_PASSWORD", "")
 
         st.info(
             "Now let's add your Snowflake Account name and Admin Credentials so we can set up the permissions and the datasets for you."
         )
         hostname_raw = st.text_input(
             "Snowflake account (this looks like as `frgcsyo-ie17820` or `frgcsyo-ie17820.aws`, check your snowlake registration email).\n\n_**This is not your Snowflake username**, but the first part of the snowflake url you received in your snowflake registration email_. You can also paste the full url from the registration email:",
-            "xxxxxx-xxxxxxxx",
+            env_account,
+            key="input_snowflake_account",
         )
         hostname = extract_snowflake_account(hostname_raw)
 
@@ -294,14 +322,20 @@ def main():
                 st.info(f"Using account identifier: `{hostname}`")
         username = st.text_input(
             "Snowflake username (change this is you didn't set it to `admin` at registration):",
-            "admin",
+            env_username,
+            key="input_snowflake_username",
         )
-        password = st.text_input("Snowflake Password:", pw, type="password")
+        password = st.text_input(
+            "Snowflake Password:",
+            env_password,
+            type="password",
+            key="input_snowflake_password",
+        )
 
         st.warning(
             "Snowflake has been rolling out an update gradually which enforces **Multi Factor Authentication (MFA)**. If you have been enrolled to MFA, a text message / push notification will be sent to your DUO Authenticator app after you click _Start Setup_. If this happens, please approve the request and the setup will continue automatically."
         )
-        if st.button("🎯 Start Setup"):
+        if st.button("🎯 Start Setup", key="btn_start_snowflake_setup"):
             if len(password) == 0:
                 st.error("🚨 Please provide a password")
                 return
@@ -316,7 +350,8 @@ def main():
 
             try:
                 with st.status("🔌 Connecting to Snowflake"):
-                    connection = get_snowflake_connection(hostname, username, password)
+                    connection_cm = get_snowflake_connection(hostname, username, password)
+                    connection = connection_cm.__enter__()
             except InterfaceError as e:
                 st.error(
                     f"""Error connecting to Snowflake. This usually means that the snowflake account is invalid.
@@ -345,106 +380,108 @@ def main():
                 )
                 return
 
-            with st.status(
-                f"⚙️ Setting up your Snowflake account (this can take up to 2 minutes)"
-            ) as status_spinner:
-                try:
-                    for section, commands in sql_commands.items():
-                        with st.status(
-                            sql_sections[section]
-                        ) as internal_status_spinner:
-                            for command in commands:
-                                st.write(f"Executing command: `{command}`")
-                                connection.execute(text(command))
-                                connection.commit()
-                    for table in ["RAW_LISTINGS", "RAW_HOSTS", "RAW_REVIEWS"]:
-                        result = connection.execute(
-                            text(f"SELECT COUNT(*) FROM {table}")
+            try:
+                with st.status(
+                    f"⚙️ Setting up your Snowflake account (this can take up to 2 minutes)"
+                ) as status_spinner:
+                    try:
+                        for section, commands in sql_commands.items():
+                            with st.status(
+                                sql_sections[section]
+                            ) as internal_status_spinner:
+                                for command in commands:
+                                    st.write(f"Executing command: `{command}`")
+                                    connection.execute(text(command))
+                                    connection.commit()
+                        for table in ["RAW_LISTINGS", "RAW_HOSTS", "RAW_REVIEWS"]:
+                            result = connection.execute(
+                                text(f"SELECT COUNT(*) FROM {table}")
+                            )
+                            count = result.fetchone()[0]
+                            if count == 0:
+                                st.error(
+                                    f"Table {table} has no rows. This is unexpected. Please check the logs and try again."
+                                )
+                                return
+
+                    except Exception as e:
+                        st.error(
+                            f"Error executing command {command}.\n\nOriginal Error:\n\n{e}\n\nTraceback:\n\n{traceback.format_exc()}"
                         )
-                        count = result.fetchone()[0]
-                        if count == 0:
-                            st.error(
-                                f"Table {table} has no rows. This is unexpected. Please check the logs and try again."
-                            )
-                            return
+                        logging.warning(
+                            f"{session_id}: Error executing command {command}. Account name: {hostname}\n Original Error: {e}"
+                        )
+                        internal_status_spinner.update(
+                            label="Error executing command",
+                            state="error",
+                            expanded=True,
+                        )
+                        status_spinner.update(
+                            label="Error executing command",
+                            state="error",
+                            expanded=True,
+                        )
+                        return
 
-                except Exception as e:
-                    st.error(
-                        f"Error executing command {command}.\n\nOriginal Error:\n\n{e}\n\nTraceback:\n\n{traceback.format_exc()}"
-                    )
-                    logging.warning(
-                        f"{session_id}: Error executing command {command}. Account name: {hostname}\n Original Error: {e}"
-                    )
-                    internal_status_spinner.update(
-                        label="Error executing command",
-                        state="error",
-                        expanded=True,
-                    )
-                    status_spinner.update(
-                        label="Error executing command",
-                        state="error",
-                        expanded=True,
-                    )
-                    return
+                    try:
+                        private_key_pem = st.session_state.keypair.private_key
+                        for users in [
+                            ("dbt", "TRANSFORM", "RAW"),
+                            ("preset", "REPORTER", "DEV"),
+                        ]:
+                            with st.status(
+                                f"Verifying connection with {users[0]} user"
+                            ) as internal_status_spinner:
+                                with get_dbt_connection(
+                                    hostname, users[0], users[1], private_key_pem
+                                ) as dbt_connection:
+                                    dbt_result = dbt_connection.execute(
+                                        text(f"USE ROLE {users[1]}")
+                                    )
+                                    dbt_result = dbt_connection.execute(
+                                        text(f"USE DATABASE AIRBNB")
+                                    )
+                                    dbt_result = dbt_connection.execute(
+                                        text(f"USE SCHEMA {users[2]}")
+                                    )
 
-                try:
-                    private_key_pem = st.session_state.keypair.private_key
-                    for users in [
-                        ("dbt", "TRANSFORM", "RAW"),
-                        ("preset", "REPORTER", "DEV"),
-                    ]:
-                        with st.status(
-                            f"Verifying connection with {users[0]} user"
-                        ) as internal_status_spinner:
-                            dbt_connection = get_dbt_connection(
-                                hostname, users[0], users[1], private_key_pem
-                            )
+                                    if users[0] == "dbt":
+                                        # Query RAW_LISTINGS table using dbt user
+                                        query = "SELECT * FROM RAW.RAW_LISTINGS"
+                                        dbt_result = dbt_connection.execute(text(query))
+                                        dbt_result.fetchone()
 
-                            dbt_result = dbt_connection.execute(
-                                text(f"USE ROLE {users[1]}")
-                            )
-                            dbt_result = dbt_connection.execute(
-                                text(f"USE DATABASE AIRBNB")
-                            )
-                            dbt_result = dbt_connection.execute(
-                                text(f"USE SCHEMA {users[2]}")
-                            )
+                                internal_status_spinner.success(
+                                    f"Success connecting as {users[0]} user"
+                                )
+                        snowflake_setup_complete = True
 
-                            if users[0] == "dbt":
-                                # Query RAW_LISTINGS table using dbt user
-                                query = "SELECT * FROM RAW.RAW_LISTINGS"
-                                dbt_result = dbt_connection.execute(text(query))
-                                dbt_result.fetchone()
-
-                            dbt_connection.close()
-                            internal_status_spinner.success(
-                                f"Success connecting as {users[0]} user"
-                            )
-                    snowflake_setup_complete = True
-
-                except Exception as e:
-                    error_msg = (
-                        f"❌ Failed to connect with {users[0]} user or query "
-                        f"RAW_LISTINGS: {str(e)}"
-                    )
-                    st.error(error_msg)
-                    st.warning(
-                        "This might indicate an issue with the {users[0]} user "
-                        "setup or permissions."
-                    )
-                    logging.warning(
-                        f"{session_id}: {users[0]} user connection failed: {e}\nTraceback:\n{traceback.format_exc()}"
-                    )
-                    internal_status_spinner.update(
-                        label=f"Error Connecting as {users[0]} user",
-                        state="error",
-                        expanded=True,
-                    )
-                    status_spinner.update(
-                        label=f"Error Connecting as {users[0]} user",
-                        state="error",
-                        expanded=True,
-                    )
+                    except Exception as e:
+                        error_msg = (
+                            f"❌ Failed to connect with {users[0]} user or query "
+                            f"RAW_LISTINGS: {str(e)}"
+                        )
+                        st.error(error_msg)
+                        st.warning(
+                            "This might indicate an issue with the {users[0]} user "
+                            "setup or permissions."
+                        )
+                        logging.warning(
+                            f"{session_id}: {users[0]} user connection failed: {e}\nTraceback:\n{traceback.format_exc()}"
+                        )
+                        internal_status_spinner.update(
+                            label=f"Error Connecting as {users[0]} user",
+                            state="error",
+                            expanded=True,
+                        )
+                        status_spinner.update(
+                            label=f"Error Connecting as {users[0]} user",
+                            state="error",
+                            expanded=True,
+                        )
+            finally:
+                # Ensure the main Snowflake connection is always cleaned up
+                connection_cm.__exit__(None, None, None)
 
         if snowflake_setup_complete:
             success_msg = "🎉 Snowflake Setup complete! Let's continue with downloading the configuration files!"
@@ -452,7 +489,11 @@ def main():
             status_spinner.success(success_msg, icon="🔥")
 
             st.session_state.step = 3
-            if st.button("📥 Download Configuration Files", type="primary"):
+            if st.button(
+                "📥 Download Configuration Files",
+                type="primary",
+                key="btn_goto_downloads",
+            ):
                 st.rerun()
 
     # Step 3: Download Configuration Files
@@ -462,7 +503,9 @@ def main():
         st.markdown("### 📄 Step 3: Download Configuration Files")
 
         # Add back button
-        if st.button("⬅️ Back to Snowflake Setup", type="secondary"):
+        if st.button(
+            "⬅️ Back to Snowflake Setup", type="secondary", key="btn_back_to_snowflake"
+        ):
             st.session_state.step = 2
             st.rerun()
 
@@ -506,6 +549,7 @@ def main():
                 data=profiles_content,
                 file_name="profiles.yml",
                 mime="text/yaml",
+                key="btn_download_profiles",
             )
 
         with col2:
@@ -516,6 +560,7 @@ def main():
                 data=preset_content,
                 file_name="preset-instructions.md",
                 mime="text/markdown",
+                key="btn_download_preset",
             )
 
         st.success("🎉 Configuration files ready for download!")
