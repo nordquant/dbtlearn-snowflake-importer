@@ -7,7 +7,7 @@ The easiest way is to take a look at your Snowflake Registration email and copy 
 
 ## Automated Snowflake Setup
 I encourage you to go through the automated Snowflake Setup as importing the data and setting the permissions from scratch might take quite some time.
-Follow the instructions here https://bit.ly/dbt-course-setup to set up your Snowflake database with a click of a button! ( If you encounter any issues with the link below, here is a backup server of the same application: https://dbt-course-setup.onrender.com/ )
+Follow the instructions here https://dbtsetup.nordquant.com/ to set up your Snowflake database with a click of a button! ( If you encounter any issues with the link below, here is a backup server of the same application: https://udemy-dbt-setup.streamlit.app/ )
 
 ## Snowflake data import (manual)
 _Only execute these commands if you decided to skip the Automated Snowflake Setup._
@@ -151,62 +151,27 @@ GRANT SELECT ON FUTURE TABLES IN SCHEMA AIRBNB.DEV to ROLE REPORTER;
 
 ```
 
-# Python and Virtualenv setup, and dbt installation - Windows
+## dbt installation
 
-## Python
-You want to use Python 3.12 as this is the most recent version that is compatible with every database adapter, Snowflake included.
+* Supported Python Versions: https://docs.getdbt.com/faqs/Core/install-python-compatibility
+* Student Repo: https://github.com/nordquant/dbt-student-repo
+* uv Installation guide: https://docs.astral.sh/uv/getting-started/installation/
 
-[https://www.python.org/downloads/release/python-31211/](https://www.python.org/downloads/release/python-31211/)
-
-Please make sure that you work with Python 3.12 as newer versions of python might not be compatible with some of the dbt packages.
-
-## Virtualenv setup
-Here are the commands we executed in this lesson:
+### uv Environment Setup
 ```
-cd Desktop
-mkdir course
-cd course
-
-python -m venv venv
-# Windows:
+uv sync
+# Activate virtualenv on Windows (PowerShell):
 venv\Scripts\activate
-# Mac:
+# Activate virtualenv on Mac:
 source venv/bin/activate
 ```
 
-# Virtualenv setup and dbt installation - Mac
-
-## iTerm2
-We suggest you use _iTerm2_ instead of the built-in Terminal application.
-
-https://iterm2.com/
-
-## dbt installation
-
-Supported Python Versions: https://docs.getdbt.com/faqs/Core/install-python-compatibility
-
-Here are the commands we execute in this lesson:
-
-```sh
-mkdir course
-cd course
-virtualenv venv
-. venv/bin/activate
-python --version
-pip install dbt-snowflake==1.10.2
-dbt --version
-```
-
+## dbt Project Setup
 Create a dbt project (all platforms):
 ```sh
 dbt init --skip-profile-setup airbnb
 ```
-
-## dbt 1.10 Compatibility Notes
-In dbt 1.10 and later:
-- Use `data_tests:` instead of `tests:` for column tests
-- Test parameters must be wrapped under the `arguments:` property
-- The `require_generic_test_arguments_property` flag is no longer needed
+Once done, drag and drop the `profiles.yml` file you downloaded to the `airbnb` folder.
 
 # Models
 ## Code used in the lesson
@@ -504,7 +469,7 @@ echo %ERRORLEVEL%
 $LASTEXITCODE
 ```
 
-## Contents of models/mart/mart_full_moon_reviews.sql
+## Contents of models/mart/mart_fullmoon_reviews.sql
 ```sql
 {{ config(
   materialized = 'table',
@@ -534,24 +499,16 @@ FROM
 # Snapshots
 
 ## Snapshots for listing
-The contents of `snapshots/scd_raw_listings.sql`:
-
-```sql
-{% snapshot scd_raw_listings %}
-
-{{
-   config(
-       target_schema='DEV',
-       unique_key='id',
-       strategy='timestamp',
-       updated_at='updated_at',
-       invalidate_hard_deletes=True
-   )
-}}
-
-select * FROM {{ source('airbnb', 'listings') }}
-
-{% endsnapshot %}
+The contents of `snapshots/raw_listins_snapshot.yml`:
+```yaml
+snapshots:
+  - name: scd_raw_listings
+    relation: source('airbnb', 'listings')
+    config:
+      unique_key: id
+      strategy: timestamp
+      updated_at: updated_at
+      hard_deletes: invalidate
 ```
 
 ### Updating the table
@@ -562,24 +519,17 @@ UPDATE AIRBNB.RAW.RAW_LISTINGS SET MINIMUM_NIGHTS=30,
 SELECT * FROM AIRBNB.DEV.SCD_RAW_LISTINGS WHERE ID=3176;
 ```
 
-## Snapshots for hosts
-The contents of `snapshots/scd_raw_hosts.sql`:
-```sql
-{% snapshot scd_raw_hosts %}
-
-{{
-   config(
-       target_schema='dev',
-       unique_key='id',
-       strategy='timestamp',
-       updated_at='updated_at',
-       invalidate_hard_deletes=True
-   )
-}}
-
-select * FROM {{ source('airbnb', 'hosts') }}
-
-{% endsnapshot %}
+## Assignment: Snapshots for raw_hosts
+The contents of `snapshots/raw_hosts_snapshot.yml`:
+```yaml
+snapshots:
+  - name: scd_raw_hosts
+    relation: source('airbnb', 'hosts')
+    config:
+      unique_key: id
+      strategy: timestamp
+      updated_at: updated_at
+      hard_deletes: invalidate
 ```
 
 # Tests
@@ -717,7 +667,7 @@ SELECT * FROM {{ model }} WHERE {{ column_name }} <= 0
 
 Execute Jinja in dbt:
 ```sh
-dbt compile --inline '{# This is a comment #}{% set my_name = "Zoltan" %}{{ my_name }}'
+dbt compile --inline "{# This is a comment #}{% set my_name = 'Zoltan' %}{{ my_name }}"
 ```
 
 ## Macros
@@ -733,8 +683,8 @@ Our first macro. Add this to `macros/select_positive_values.sql`
 
 Compile and execute it:
 ```sh
-dbt compile --inline '{{ select_positive_values("dim_listings_cleansed", "price") }}' 
-dbt show --inline '{{ select_positive_values("dim_listings_cleansed", "price") }}' 
+dbt compile --inline "{{ select_positive_values('dim_listings_cleansed', 'price') }}"
+dbt show --inline "{{ select_positive_values('dim_listings_cleansed', 'price') }}"
 ```
 
 ### Advanced Macros
@@ -756,8 +706,8 @@ _This version doesn't have whitespace removal added as it's an assignment. Take 
 
 Compile and execute the macro:
 ```
-dbt compile --inline 'SELECT * FROM {{ ref("dim_listings_cleansed") }} WHERE {{ no_empty_strings(ref("dim_listings_cleansed")) }}'
-dbt show --inline 'SELECT * FROM {{ ref("dim_listings_cleansed") }} WHERE {{ no_empty_strings(ref("dim_listings_cleansed")) }}'
+dbt compile --inline "SELECT * FROM {{ ref('dim_listings_cleansed') }} WHERE {{ no_empty_strings(ref('dim_listings_cleansed')) }}"
+dbt show --inline "SELECT * FROM {{ ref('dim_listings_cleansed') }} WHERE {{ no_empty_strings(ref('dim_listings_cleansed')) }}"
 ```
 ## Custom Generic Tests
 The contents of `tests/generic/positive_values.sql`
