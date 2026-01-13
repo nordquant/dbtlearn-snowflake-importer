@@ -191,7 +191,7 @@ def get_sql_commands(md, public_key=None):
 
 
 hello_msg = """
-# 🚀 The Complete dbt (Data Build Tool) Bootcamp: Zero to Hero
+# 🚀 dbt (Data Build Tool) Bootcamp
 ## ❄️ Snowflake and Profile Setup Helper
 
 Hi there! 👋
@@ -203,8 +203,6 @@ This webapp helps you getting started with dbt, Snowflake and Preset, the BI too
 * **Step 1)** Key Generation - Snowflake requires a key-based authentication, we'll generate a keypair for you that you can use then to connect to Snowflake.
 * **Step 2)** Snowflake Setup - We'll set up your Snowflake account and import the raw AirBnB tables.
 * **Step 3)** Configuration Files - We'll download the configuration files needed for your dbt project and Preset.
-
-I'd be very happy if you could provide feedback on this tool; just send me a message on Udemy. 💬
 
 On with the setup! 🎉
 """
