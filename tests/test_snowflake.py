@@ -179,8 +179,10 @@ class TestPrivateKeyDecryption:
         test_role = "TEST_ROLE"
 
         # This will likely fail with connection error, but we want to test the key processing
+        # Must enter the context manager to actually execute the connection code
         with pytest.raises(Exception) as exc_info:
-            get_dbt_connection(test_account, test_login, test_role, keypair.private_key)
+            with get_dbt_connection(test_account, test_login, test_role, keypair.private_key):
+                pass
 
         # Check that it's NOT a key decryption error
         error_msg = str(exc_info.value).lower()
