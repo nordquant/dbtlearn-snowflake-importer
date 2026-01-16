@@ -76,14 +76,20 @@ snowflake://preset@{snowflake_account}/AIRBNB?role=REPORTER&warehouse=COMPUTE_WH
 
 
 @contextmanager
-def get_snowflake_connection(account, username, password):
+def get_snowflake_connection(account, username, password, passcode=None):
     # URL encode the username and password to handle special characters
     encoded_username = quote_plus(username)
     encoded_password = quote_plus(password)
 
     connection_string = f"snowflake://{encoded_username}:{encoded_password}@{account}/AIRBNB/DEV?warehouse=COMPUTE_WH&role=ACCOUNTADMIN&account_identifier={account}"
     print(connection_string)
-    engine = create_engine(connection_string)
+
+    # Add passcode to connect_args if provided (for TOTP-based MFA)
+    connect_args = {}
+    if passcode:
+        connect_args["passcode"] = passcode
+
+    engine = create_engine(connection_string, connect_args=connect_args)
     connection = engine.connect()
 
     try:
@@ -347,8 +353,25 @@ def main():
         )
 
         st.warning(
-            "Snowflake has been rolling out an update gradually which enforces **Multi Factor Authentication (MFA)**. If you have been enrolled to MFA, a text message / push notification will be sent to your DUO Authenticator app after you click _Start Setup_. If this happens, please approve the request and the setup will continue automatically."
+            "Snowflake has been rolling out an update gradually which enforces **Multi Factor Authentication (MFA)**. If you have been enrolled to MFA, a push notification will be sent to your DUO app after you click _Start Setup_. If this happens, please approve the request and the setup will continue automatically.\n\n"
+            "**If you use TOTP-based MFA** (Google/Microsoft Authenticator, or Duo TOTP), check the box below and enter your 6-digit code."
         )
+
+        use_totp = st.checkbox(
+            "I use TOTP-based MFA (authenticator app that generates 6-digit codes)",
+            key="checkbox_use_totp",
+            help="Check this if you use an authenticator app like Google Authenticator, Microsoft Authenticator, or Duo TOTP"
+        )
+
+        passcode = None
+        if use_totp:
+            passcode = st.text_input(
+                "Enter your 6-digit TOTP code:",
+                max_chars=6,
+                key="input_totp_passcode",
+                help="Open your authenticator app and enter the current 6-digit code for Snowflake"
+            )
+
         if st.button("🎯 Start Setup", key="btn_start_snowflake_setup"):
             if len(password) == 0:
                 st.error("🚨 Please provide a password")
@@ -364,7 +387,7 @@ def main():
 
             try:
                 with st.status("🔌 Connecting to Snowflake"):
-                    connection_cm = get_snowflake_connection(hostname, username, password)
+                    connection_cm = get_snowflake_connection(hostname, username, password, passcode)
                     connection = connection_cm.__enter__()
             except InterfaceError as e:
                 st.error(
@@ -377,9 +400,21 @@ def main():
                 return
             except DatabaseError as e:
                 print(e)
-                st.error(
-                    f"Error connecting to Snowflake. This usually means that the snowflake username or password you provided is not valid. Please correct them and retry by pressing the Start Setup button.\n\nOriginal Error:\n\n{e.orig}"
-                )
+                error_str = str(e.orig) if hasattr(e, 'orig') else str(e)
+
+                # Check if this is a TOTP MFA error
+                if "TOTP is required" in error_str or "MFA with TOTP" in error_str:
+                    st.error(
+                        "🔐 **Your Snowflake account requires TOTP-based MFA.**\n\n"
+                        "Please check the **'I use TOTP-based MFA'** checkbox above and enter "
+                        "the 6-digit code from your authenticator app (Google Authenticator, "
+                        "Microsoft Authenticator, or Duo TOTP).\n\n"
+                        f"Original Error:\n\n{e.orig}"
+                    )
+                else:
+                    st.error(
+                        f"Error connecting to Snowflake. This usually means that the snowflake username or password you provided is not valid. Please correct them and retry by pressing the Start Setup button.\n\nOriginal Error:\n\n{e.orig}"
+                    )
                 logging.warning(
                     f"{session_id}: Error connecting to Snowflake. Account name: {hostname}\n Original Error: {e}"
                 )
