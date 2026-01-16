@@ -20,8 +20,9 @@ from datetime import datetime, timezone
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_START_TIME = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 sql_sections = {
-    "snowflake_setup": "Setting up the dbt User an Roles",
+    "snowflake_setup": "Setting up the dbt User and Roles",
     "snowflake_import": "Importing Raw Tables",
+    "capstone_airstats": "Importing AIRSTATS Capstone Tables",
 }
 
 
@@ -196,7 +197,7 @@ def get_sql_commands(md, public_key=None):
     }
 
 
-hello_msg = """
+hello_msg_default = """
 # 🚀 dbt (Data Build Tool) Bootcamp
 ## ❄️ Snowflake and Profile Setup Helper
 
@@ -208,6 +209,23 @@ This webapp helps you getting started with dbt, Snowflake and Preset, the BI too
 
 * **Step 1)** Key Generation - Snowflake requires a key-based authentication, we'll generate a keypair for you that you can use then to connect to Snowflake.
 * **Step 2)** Snowflake Setup - We'll set up your Snowflake account and import the raw AirBnB tables.
+* **Step 3)** Configuration Files - We'll download the configuration files needed for your dbt project and Preset.
+
+On with the setup! 🎉
+"""
+
+hello_msg_ceu = """
+# 🎓 CEU Modern Data Platforms
+## ❄️ Snowflake and Profile Setup Helper
+
+Hi there! 👋
+
+This webapp helps you getting started with dbt, Snowflake and Preset for the **CEU Modern Data Platforms** course.
+
+**We'll do the following**:
+
+* **Step 1)** Key Generation - Snowflake requires a key-based authentication, we'll generate a keypair for you that you can use then to connect to Snowflake.
+* **Step 2)** Snowflake Setup - We'll set up your Snowflake account and import the raw AirBnB tables **and the AIRSTATS capstone database**.
 * **Step 3)** Configuration Files - We'll download the configuration files needed for your dbt project and Preset.
 
 On with the setup! 🎉
@@ -239,12 +257,19 @@ def main():
     session_id = streamlit_session_id()
     logger.info("Starting Streamlit app")
 
+    # Detect course mode from query params
+    course_mode = st.query_params.get("course", "default")
+    if "course_mode" not in st.session_state:
+        st.session_state.course_mode = course_mode
+    is_ceu_mode = st.session_state.course_mode == "ceu"
+
     # Initialize session state for step tracking
     if "step" not in st.session_state:
         st.session_state.step = 0
 
     # Landing Page
     if st.session_state.step == 0:
+        hello_msg = hello_msg_ceu if is_ceu_mode else hello_msg_default
         st.markdown(hello_msg)
 
         if st.button(
@@ -380,10 +405,20 @@ def main():
             # Load and process SQL commands with public key substitution
             with open(CURRENT_DIR + "/course-resources.md", "r") as file:
                 md = file.read().rstrip()
-                # Get the public key from session state if available
-                public_key = st.session_state.keypair.public_key
-                sql_commands = get_sql_commands(md, public_key)
-                print(sql_commands)
+            # Get the public key from session state if available
+            public_key = st.session_state.keypair.public_key
+            sql_commands = get_sql_commands(md, public_key)
+
+            # Load capstone SQL if in CEU mode
+            if is_ceu_mode:
+                capstone_path = CURRENT_DIR + "/capstone-resources.md"
+                if os.path.exists(capstone_path):
+                    with open(capstone_path, "r") as file:
+                        capstone_md = file.read().rstrip()
+                    capstone_commands = get_sql_commands(capstone_md, public_key)
+                    sql_commands.update(capstone_commands)
+
+            print(sql_commands)
 
             try:
                 with st.status("🔌 Connecting to Snowflake"):
@@ -435,6 +470,9 @@ def main():
                 ) as status_spinner:
                     try:
                         for section, commands in sql_commands.items():
+                            # Skip capstone section if not in CEU mode
+                            if section == "capstone_airstats" and not is_ceu_mode:
+                                continue
                             with st.status(
                                 sql_sections[section]
                             ) as internal_status_spinner:
@@ -442,7 +480,14 @@ def main():
                                     st.write(f"Executing command: `{command}`")
                                     connection.execute(text(command))
                                     connection.commit()
-                        for table in ["RAW_LISTINGS", "RAW_HOSTS", "RAW_REVIEWS"]:
+
+                        # Verify AIRBNB tables (use fully qualified names in case context changed)
+                        tables_to_verify = [
+                            "AIRBNB.RAW.RAW_LISTINGS",
+                            "AIRBNB.RAW.RAW_HOSTS",
+                            "AIRBNB.RAW.RAW_REVIEWS",
+                        ]
+                        for table in tables_to_verify:
                             result = connection.execute(
                                 text(f"SELECT COUNT(*) FROM {table}")
                             )
@@ -452,6 +497,24 @@ def main():
                                     f"Table {table} has no rows. This is unexpected. Please check the logs and try again."
                                 )
                                 return
+
+                        # Verify AIRSTATS tables if in CEU mode
+                        if is_ceu_mode:
+                            airstats_tables = [
+                                "AIRSTATS.RAW.AIRPORTS",
+                                "AIRSTATS.RAW.AIRPORT_COMMENTS",
+                                "AIRSTATS.RAW.RUNWAYS",
+                            ]
+                            for table in airstats_tables:
+                                result = connection.execute(
+                                    text(f"SELECT COUNT(*) FROM {table}")
+                                )
+                                count = result.fetchone()[0]
+                                if count == 0:
+                                    st.error(
+                                        f"Table {table} has no rows. This is unexpected. Please check the logs and try again."
+                                    )
+                                    return
 
                     except Exception as e:
                         st.error(
