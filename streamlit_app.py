@@ -466,10 +466,14 @@ def main():
                     f"⚙️ Setting up your Snowflake account (this can take up to 2 minutes)"
                 ) as status_spinner:
                     try:
+                        # Log sections being executed for debugging
+                        logging.info(f"{session_id}: SQL sections to execute: {list(sql_commands.keys())}, is_ceu_mode={is_ceu_mode}")
+
                         for section, commands in sql_commands.items():
                             # Skip capstone section if not in CEU mode
                             if section == "capstone_airstats" and not is_ceu_mode:
                                 continue
+                            logging.info(f"{session_id}: Executing section: {section} with {len(commands)} commands")
                             with st.status(
                                 sql_sections[section]
                             ) as internal_status_spinner:
