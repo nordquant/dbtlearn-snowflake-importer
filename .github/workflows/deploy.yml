@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       drain_timeout:
-        description: 'Drain timeout in seconds (default: 600 = 10 minutes for production)'
+        description: 'Drain timeout in seconds (default: 300 = 5 minutes for production)'
         required: false
-        default: '600'
+        default: '300'
         type: string
 
 permissions:
@@ -29,7 +29,7 @@ jobs:
       - name: Deploy to production server
         uses: appleboy/ssh-action@v1.0.3
         env:
-          DRAIN_TIMEOUT: ${{ inputs.drain_timeout || '600' }}
+          DRAIN_TIMEOUT: ${{ inputs.drain_timeout || '300' }}
           REGISTRY_USERNAME: ${{ secrets.REGISTRY_USERNAME }}
           REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
           REGISTRY: ${{ env.REGISTRY }}
