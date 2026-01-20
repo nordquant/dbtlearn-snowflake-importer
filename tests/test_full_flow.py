@@ -8,7 +8,10 @@ SNOWFLAKE_SETUP_TIMEOUT = 300
 class TestFullSetupFlow:
     """Test the complete Streamlit app flow using AppTest."""
 
-    def test_complete_setup_flow(self, snowflake_credentials):
+    @pytest.mark.parametrize(
+        "is_ceu_mode", [True, False], ids=["ceu_mode", "standard_mode"]
+    )
+    def test_complete_setup_flow(self, snowflake_credentials, is_ceu_mode):
         """
         Test the full setup flow:
         1. Start setup
@@ -16,9 +19,17 @@ class TestFullSetupFlow:
         3. Enter Snowflake credentials
         4. Run Snowflake setup (creates users, imports data)
         5. Verify we reach the download step
+
+        Parameterized for CEU mode (with AIRSTATS) and standard mode (AIRBNB only).
+        CEU mode runs first to test the capstone database setup.
         """
         # Initialize the app
         at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+
+        # Set CEU mode query param if needed (before first run)
+        if is_ceu_mode:
+            at.query_params["course"] = "ceu"
+
         at.run()
 
         # Verify app started without errors
@@ -62,6 +73,10 @@ class TestFullSetupFlow:
             pytest.fail(f"Snowflake setup showed errors: {error_messages}")
 
         # Verify we reached step 3 (download configuration files)
+        # This confirms the setup completed successfully, including:
+        # - AIRBNB database and tables created
+        # - AIRSTATS database and tables created (CEU mode only)
+        # - All table verifications passed
         assert at.session_state.step == 3, (
             f"Expected step 3, got step {at.session_state.step}"
         )

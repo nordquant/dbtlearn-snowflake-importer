@@ -416,9 +416,7 @@ def main():
                     with open(capstone_path, "r") as file:
                         capstone_md = file.read().rstrip()
                     capstone_commands = get_sql_commands(capstone_md, public_key)
-                    sql_commands.update(capstone_commands)
-
-            print(sql_commands)
+                    sql_commands = {**sql_commands, **capstone_commands}
 
             try:
                 with st.status("🔌 Connecting to Snowflake"):

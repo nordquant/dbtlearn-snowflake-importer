@@ -52,7 +52,8 @@ CREATE OR REPLACE TABLE airport_comments (
     date                DATETIME,
     member_nickname     STRING,
     subject             STRING,
-    body                STRING
+    body                STRING,
+    loaded_at           TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 COPY INTO airport_comments (id, thread_ref, airport_ref, airport_ident,
