@@ -166,7 +166,6 @@ def streamlit_session_id():
         return "test-session"
 
 
-@st.cache_data
 def get_sql_commands(md, public_key=None):
     commands = OrderedDict()
     current_section = None
