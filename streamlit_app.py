@@ -409,13 +409,31 @@ def main():
             sql_commands = get_sql_commands(md, public_key)
 
             # Load capstone SQL if in CEU mode
+            print(f"DEBUG [{session_id}]: === CAPSTONE LOAD CHECK ===")
+            print(f"DEBUG [{session_id}]: is_ceu_mode={is_ceu_mode}")
+            print(f"DEBUG [{session_id}]: course_mode in session_state={st.session_state.course_mode}")
+            print(f"DEBUG [{session_id}]: query_params={dict(st.query_params)}")
+            print(f"DEBUG [{session_id}]: Initial sql_commands sections: {list(sql_commands.keys())}")
+            logging.info(f"{session_id}: is_ceu_mode={is_ceu_mode}, course_mode={st.session_state.course_mode}")
             if is_ceu_mode:
                 capstone_path = CURRENT_DIR + "/capstone-resources.md"
+                print(f"DEBUG [{session_id}]: Loading capstone from {capstone_path}")
+                print(f"DEBUG [{session_id}]: File exists: {os.path.exists(capstone_path)}")
+                logging.info(f"{session_id}: Loading capstone from {capstone_path}, exists={os.path.exists(capstone_path)}")
                 if os.path.exists(capstone_path):
                     with open(capstone_path, "r") as file:
                         capstone_md = file.read().rstrip()
                     capstone_commands = get_sql_commands(capstone_md, public_key)
+                    print(f"DEBUG [{session_id}]: Capstone sections loaded: {list(capstone_commands.keys())}")
+                    print(f"DEBUG [{session_id}]: Capstone command counts: {[(k, len(v)) for k, v in capstone_commands.items()]}")
+                    logging.info(f"{session_id}: Capstone sections loaded: {list(capstone_commands.keys())}")
                     sql_commands = {**sql_commands, **capstone_commands}
+                    print(f"DEBUG [{session_id}]: After merge, sql_commands sections: {list(sql_commands.keys())}")
+                    logging.info(f"{session_id}: After merge, sections: {list(sql_commands.keys())}")
+                else:
+                    print(f"DEBUG [{session_id}]: ERROR - capstone file does not exist!")
+            else:
+                print(f"DEBUG [{session_id}]: NOT in CEU mode - skipping capstone load")
 
             try:
                 with st.status("🔌 Connecting to Snowflake"):
@@ -467,12 +485,17 @@ def main():
                 ) as status_spinner:
                     try:
                         # Log sections being executed for debugging
+                        print(f"DEBUG [{session_id}]: === EXECUTING SQL SECTIONS ===")
+                        print(f"DEBUG [{session_id}]: Sections to execute: {list(sql_commands.keys())}")
+                        print(f"DEBUG [{session_id}]: is_ceu_mode={is_ceu_mode}")
                         logging.info(f"{session_id}: SQL sections to execute: {list(sql_commands.keys())}, is_ceu_mode={is_ceu_mode}")
 
                         for section, commands in sql_commands.items():
                             # Skip capstone section if not in CEU mode
                             if section == "capstone_airstats" and not is_ceu_mode:
+                                print(f"DEBUG [{session_id}]: SKIPPING section {section} (not CEU mode)")
                                 continue
+                            print(f"DEBUG [{session_id}]: EXECUTING section: {section} with {len(commands)} commands")
                             logging.info(f"{session_id}: Executing section: {section} with {len(commands)} commands")
                             with st.status(
                                 sql_sections[section]
