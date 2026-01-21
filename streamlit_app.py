@@ -56,6 +56,34 @@ sql_sections = {
     "capstone_airstats": "Importing AIRSTATS Capstone Tables",
 }
 
+# SQL resource files configuration
+# Each entry: (filename, required_for_modes) where modes is a list or None for always required
+SQL_RESOURCE_FILES = [
+    ("course-resources.md", None),  # Always required
+    ("capstone-resources.md", ["ceu"]),  # Required only in CEU mode
+]
+
+
+def check_sql_resource_files(course_mode: str) -> list[str]:
+    """Check if all required SQL resource files exist.
+
+    Returns a list of warning messages for missing files.
+    """
+    warnings = []
+    for filename, required_modes in SQL_RESOURCE_FILES:
+        filepath = os.path.join(CURRENT_DIR, filename)
+        is_required = required_modes is None or course_mode in required_modes
+
+        if is_required and not os.path.exists(filepath):
+            mode_desc = f" (required for {course_mode} mode)" if required_modes else ""
+            warnings.append(
+                f"SQL resource file '{filename}' not found{mode_desc}. "
+                f"Some features may not work correctly."
+            )
+            logging.error(f"Missing SQL resource file: {filepath}")
+
+    return warnings
+
 
 def generate_profiles_yml(snowflake_account: str, private_key_pem_text: str) -> str:
     """Generate profiles.yml content from template with account and private key."""
@@ -295,6 +323,11 @@ def main():
         st.session_state.course_mode = course_mode
     is_ceu_mode = st.session_state.course_mode == "ceu"
 
+    # Check for missing SQL resource files and display warnings
+    resource_warnings = check_sql_resource_files(st.session_state.course_mode)
+    for warning in resource_warnings:
+        st.warning(f"⚠️ {warning}")
+
     # Initialize session state for step tracking
     if "step" not in st.session_state:
         st.session_state.step = 0
@@ -448,6 +481,8 @@ def main():
             print(f"DEBUG [{session_id}]: query_params={dict(st.query_params)}")
             print(f"DEBUG [{session_id}]: Initial sql_commands sections: {list(sql_commands.keys())}")
             logging.info(f"{session_id}: is_ceu_mode={is_ceu_mode}, course_mode={st.session_state.course_mode}")
+            # Track whether capstone was loaded for verification later
+            capstone_loaded = False
             if is_ceu_mode:
                 capstone_path = CURRENT_DIR + "/capstone-resources.md"
                 print(f"DEBUG [{session_id}]: Loading capstone from {capstone_path}")
@@ -463,8 +498,10 @@ def main():
                     sql_commands = {**sql_commands, **capstone_commands}
                     print(f"DEBUG [{session_id}]: After merge, sql_commands sections: {list(sql_commands.keys())}")
                     logging.info(f"{session_id}: After merge, sections: {list(sql_commands.keys())}")
+                    capstone_loaded = True
                 else:
                     print(f"DEBUG [{session_id}]: ERROR - capstone file does not exist!")
+                    logging.error(f"{session_id}: Capstone file not found at {capstone_path}")
             else:
                 print(f"DEBUG [{session_id}]: NOT in CEU mode - skipping capstone load")
 
@@ -555,8 +592,8 @@ def main():
                                 )
                                 return
 
-                        # Verify AIRSTATS tables if in CEU mode
-                        if is_ceu_mode:
+                        # Verify AIRSTATS tables if capstone was loaded in CEU mode
+                        if capstone_loaded:
                             airstats_tables = [
                                 "AIRSTATS.RAW.AIRPORTS",
                                 "AIRSTATS.RAW.AIRPORT_COMMENTS",

@@ -35,6 +35,7 @@ docker-compose*.yml
 # Documentation
 *.md
 !course-resources.md
+!capstone-resources.md
 docs/
 
 # Tests
