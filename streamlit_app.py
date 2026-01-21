@@ -1,5 +1,7 @@
+import json
 import logging
 import os
+import socket
 import traceback
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -19,6 +21,35 @@ from datetime import datetime, timezone
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_START_TIME = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+# Container ID: in Docker HOSTNAME is the container ID, locally use machine hostname
+CONTAINER_ID = os.environ.get("HOSTNAME", socket.gethostname())
+
+
+def _generate_container_info_file():
+    """Generate static/container-info.json for deployment verification.
+
+    This file is served by Streamlit's static file serving and used by the
+    deployment script to verify which container is serving traffic.
+    Works both locally and in Docker.
+    """
+    static_dir = os.path.join(CURRENT_DIR, "static")
+    os.makedirs(static_dir, exist_ok=True)
+
+    info = {
+        "container_id": CONTAINER_ID,
+        "git_commit": os.environ.get("GIT_COMMIT", "local"),
+        "started_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+
+    info_path = os.path.join(static_dir, "container-info.json")
+    with open(info_path, "w") as f:
+        json.dump(info, f, indent=2)
+
+    print(f"Container info written to {info_path}: {info}")
+
+
+# Generate container info file at module load (once per process)
+_generate_container_info_file()
 sql_sections = {
     "snowflake_setup": "Setting up the dbt User and Roles",
     "snowflake_import": "Importing Raw Tables",
@@ -249,7 +280,9 @@ def get_build_info() -> str:
         commit_link = f'<a href="{GITHUB_REPO_URL}/commit/{commit_full}" target="_blank" style="color: #888;">{commit_short}</a>'
     else:
         commit_link = commit_short
-    return f"commit: {commit_link} | started: {APP_START_TIME} UTC"
+    # HOSTNAME is automatically set by Docker to the container ID
+    container_id = os.environ.get("HOSTNAME", "unknown")[:12]
+    return f"commit: {commit_link} | container: {container_id} | started: {APP_START_TIME} UTC"
 
 
 def main():

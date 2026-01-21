@@ -37,6 +37,9 @@ COPY --from=dependencies /app/.venv /app/.venv
 # Copy application code (changes frequently)
 COPY . .
 
+# Make entrypoint executable
+RUN chmod +x /app/entrypoint.sh
+
 # Create a non-root user
 RUN adduser -D -u 1000 appuser && \
     chown -R appuser:appuser /app
@@ -60,5 +63,5 @@ ENV GIT_COMMIT=${GIT_COMMIT}
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8501/_stcore/health || exit 1
 
-# Run the application
-CMD ["/app/.venv/bin/streamlit", "run", "streamlit_app.py", "--server.address", "0.0.0.0", "--server.port", "8501", "--server.headless", "true"]
+# Run the application via entrypoint (generates container info, then starts Streamlit)
+CMD ["/app/entrypoint.sh"]

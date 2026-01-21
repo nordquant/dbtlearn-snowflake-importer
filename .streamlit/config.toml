@@ -5,6 +5,8 @@ headless = true
 enableCORS = false
 enableXsrfProtection = false
 runOnSave = true
+# Enable static file serving from /app/static
+enableStaticServing = true
 
 [browser]
 gatherUsageStats = false

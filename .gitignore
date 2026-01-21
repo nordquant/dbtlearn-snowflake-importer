@@ -2,3 +2,5 @@
 /.claude/
 __pycache__/
 .env
+# Generated at container startup
+/static/
