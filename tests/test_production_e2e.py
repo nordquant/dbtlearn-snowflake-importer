@@ -165,19 +165,28 @@ class TestProductionE2E:
             # Step 4: Enter Snowflake credentials
             print("Step 4: Entering Snowflake credentials...")
 
-            # Streamlit renders text inputs with labels above them
-            # We use get_by_label which matches aria-label attributes
-            # The inputs are in order: account, username, password
+            # Wait for Streamlit to render the form inputs
+            # Streamlit needs time to render form elements after navigation
+            page.wait_for_selector("input[type='password']", timeout=PAGE_TIMEOUT)
 
-            # Get all visible text inputs (non-password)
-            text_inputs = page.locator("input[type='text']:visible").all()
+            # Streamlit text_input renders as regular input elements
+            # Find inputs by their position - account first, then username, then password
+            # Use a more permissive selector that works with Streamlit's rendering
+            all_inputs = page.locator("input:not([type='hidden'])").all()
+            text_inputs = [inp for inp in all_inputs if inp.get_attribute("type") != "password"]
+
             if len(text_inputs) >= 2:
                 # First text input is account
                 text_inputs[0].fill(snowflake_credentials["account"])
                 # Second text input is username
                 text_inputs[1].fill(snowflake_credentials["username"])
             else:
-                pytest.fail(f"Expected at least 2 text inputs, found {len(text_inputs)}")
+                # Debug: log what we found
+                all_input_types = [inp.get_attribute("type") for inp in all_inputs]
+                pytest.fail(
+                    f"Expected at least 2 text inputs, found {len(text_inputs)}. "
+                    f"All inputs found: {len(all_inputs)}, types: {all_input_types}"
+                )
 
             # Password input
             password_input = page.locator("input[type='password']").first
