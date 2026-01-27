@@ -1,0 +1,94 @@
+name: Production Monitor
+
+on:
+  schedule:
+    # Run daily at 3am UTC (after the 2am build/deploy)
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    # Manual trigger for testing
+    inputs:
+      run_full_test:
+        description: 'Run full Snowflake setup flow (requires credentials)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: read
+
+env:
+  PRODUCTION_URL: https://dbtsetup.nordquant.com
+
+jobs:
+  health-check:
+    name: Quick Health Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check site is up
+        run: |
+          echo "Checking ${{ env.PRODUCTION_URL }}..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.PRODUCTION_URL }})
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "Site returned HTTP $HTTP_STATUS"
+            exit 1
+          fi
+          echo "Site is up (HTTP 200)"
+
+      - name: Check container info endpoint
+        run: |
+          echo "Checking container info..."
+          curl -f ${{ env.PRODUCTION_URL }}/static/container-info.json | jq .
+          echo "Container info endpoint is accessible"
+
+  e2e-test:
+    name: Full E2E Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: health-check
+    # Run full test on schedule, or when manually triggered with run_full_test=true
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_full_test == 'true')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Install Playwright browsers
+        run: uv run playwright install chromium --with-deps
+
+      - name: Run health check test
+        run: uv run pytest tests/test_production_e2e.py::test_quick_health_check -v -s
+
+      - name: Run full E2E test
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          # Optional: Cloudflare Access Service Token (if site is protected)
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: uv run pytest tests/test_production_e2e.py::TestProductionE2E -v -s --timeout=600
+
+      - name: Upload failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-failure-screenshots
+          path: /tmp/e2e_*.png
+          retention-days: 7
+          if-no-files-found: ignore

@@ -23,6 +23,7 @@ dev = [
     "isort==7.0.0",
     "pytest==9.0.2",
     "python-dotenv==1.2.1",
+    "playwright>=1.40.0",
 ]
 
 [dependency-groups]
