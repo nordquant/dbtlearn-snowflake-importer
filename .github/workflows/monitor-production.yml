@@ -39,11 +39,16 @@ jobs:
           fi
           echo "Site is up (HTTP 200)"
 
-      - name: Check container info endpoint
+      - name: Verify page content
         run: |
-          echo "Checking container info..."
-          curl -f ${{ env.PRODUCTION_URL }}/static/container-info.json | jq .
-          echo "Container info endpoint is accessible"
+          echo "Checking page contains expected content..."
+          PAGE_CONTENT=$(curl -s ${{ env.PRODUCTION_URL }})
+          if echo "$PAGE_CONTENT" | grep -q "Streamlit"; then
+            echo "Page contains Streamlit content"
+          else
+            echo "Page does not contain expected content"
+            exit 1
+          fi
 
   e2e-test:
     name: Full E2E Test
