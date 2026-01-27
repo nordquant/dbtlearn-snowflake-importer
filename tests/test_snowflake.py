@@ -73,6 +73,21 @@ class TestExtractSnowflakeAccount:
             == "myaccount-123.us-east-1.aws"
         )
 
+    def test_account_with_regional_identifier(self):
+        """Test the new regional format like JL05209.ap-southeast-3.aws"""
+        assert (
+            extract_snowflake_account(
+                "https://JL05209.ap-southeast-3.aws.snowflakecomputing.com"
+            )
+            == "JL05209.ap-southeast-3.aws"
+        )
+
+    def test_account_with_regional_identifier_no_protocol(self):
+        assert (
+            extract_snowflake_account("JL05209.ap-southeast-3.aws.snowflakecomputing.com")
+            == "JL05209.ap-southeast-3.aws"
+        )
+
     def test_single_word_account(self):
         assert extract_snowflake_account("singleword") == "singleword"
 
@@ -100,6 +115,13 @@ class TestIsValidSnowflakeAccount:
     def test_valid_account_with_aws_only(self):
         assert is_valid_snowflake_account("abc123.aws") is True
 
+    def test_valid_account_with_regional_identifier(self):
+        """Test the new regional format like JL05209.ap-southeast-3.aws"""
+        assert is_valid_snowflake_account("JL05209.ap-southeast-3.aws") is True
+
+    def test_valid_account_with_region_and_aws(self):
+        assert is_valid_snowflake_account("myaccount-123.us-east-1.aws") is True
+
     def test_invalid_empty_string(self):
         assert is_valid_snowflake_account("") is False
 
@@ -112,8 +134,11 @@ class TestIsValidSnowflakeAccount:
     def test_invalid_with_special_chars(self):
         assert is_valid_snowflake_account("invalid@account") is False
 
-    def test_invalid_with_dots_in_middle(self):
-        assert is_valid_snowflake_account("invalid.account.format") is False
+    def test_invalid_starting_with_dot(self):
+        assert is_valid_snowflake_account(".invalid.account") is False
+
+    def test_invalid_ending_with_dot(self):
+        assert is_valid_snowflake_account("invalid.account.") is False
 
     def test_invalid_with_multiple_hyphens(self):
         assert is_valid_snowflake_account("too-many-hyphens") is False
