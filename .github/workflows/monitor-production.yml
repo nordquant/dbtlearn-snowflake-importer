@@ -19,6 +19,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: snowflake-tests
+  cancel-in-progress: false
+
 env:
   PRODUCTION_URL: https://dbtsetup.nordquant.com
 

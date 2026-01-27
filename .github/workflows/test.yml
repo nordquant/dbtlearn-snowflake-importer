@@ -14,6 +14,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: snowflake-tests
+  cancel-in-progress: false
+
 env:
   REGISTRY: registry.nordquant.com
   IMAGE_NAME: dbt-bootcamp-setup
