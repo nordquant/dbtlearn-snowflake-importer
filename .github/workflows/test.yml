@@ -1,6 +1,7 @@
 name: Test
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -43,12 +44,26 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
 
+      - name: Check for [testceu] tag
+        id: check_ceu
+        run: |
+          if echo "${{ github.event.head_commit.message }}" | grep -qi '\[testceu\]'; then
+            echo "run_ceu=true" >> $GITHUB_OUTPUT
+          else
+            echo "run_ceu=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run integration tests
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        run: uv run pytest tests/test_full_flow.py -v -s --timeout=600
+        run: |
+          if [ "${{ steps.check_ceu.outputs.run_ceu }}" = "true" ]; then
+            uv run pytest tests/test_full_flow.py -v -s --timeout=600
+          else
+            uv run pytest tests/test_full_flow.py -v -s --timeout=600 -m "not ceu"
+          fi
 
   build-test-push:
     name: Build, Test & Push Docker Image
