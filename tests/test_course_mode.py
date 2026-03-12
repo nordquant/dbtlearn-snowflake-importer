@@ -6,7 +6,7 @@ class TestCourseModeDetection:
     """Test course mode detection from query parameters."""
 
     def test_default_mode_welcome_message(self):
-        """Default mode shows standard dbt Bootcamp welcome."""
+        """Default mode shows standard dbt Bootcamp welcome with AIRSTATS mention."""
         at = AppTest.from_file("streamlit_app.py", default_timeout=30)
         at.run()
 
@@ -14,6 +14,8 @@ class TestCourseModeDetection:
         welcome_text = " ".join([m.value for m in at.markdown])
         assert "dbt (Data Build Tool) Bootcamp" in welcome_text
         assert "CEU Modern Data Platforms" not in welcome_text
+        # Default welcome now mentions AIRSTATS
+        assert "AIRSTATS capstone database" in welcome_text
 
     def test_ceu_mode_welcome_message(self):
         """CEU mode shows CEU Modern Data Platforms branding."""
@@ -49,9 +51,105 @@ class TestCourseModeDetection:
         at.button(key="btn_start_setup").click().run()
         assert at.session_state.course_mode == "ceu"
 
-        # Navigate to step 2
-        at.button(key="btn_continue_to_snowflake").click().run()
-        assert at.session_state.course_mode == "ceu"
+
+class TestModeSelection:
+    """Test mode selection behavior."""
+
+    def test_mode_selector_renders_in_default_mode(self):
+        """Mode selector renders when not in CEU mode."""
+        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at.run()
+
+        radio = at.radio(key="radio_setup_mode")
+        assert radio is not None
+        assert radio.value == "Standard Setup"
+
+    def test_no_mode_selector_in_ceu_mode(self):
+        """No mode selector when ?course=ceu."""
+        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at.query_params["course"] = "ceu"
+        at.run()
+
+        try:
+            at.radio(key="radio_setup_mode")
+            pytest.fail("Mode selector should not exist in CEU mode")
+        except KeyError:
+            pass  # Expected
+
+    def test_switching_modes_resets_step(self):
+        """Switching between modes resets step to 0."""
+        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at.run()
+
+        # Start in standard mode, go to step 1
+        at.button(key="btn_start_setup").click().run()
+        assert at.session_state.step == 1
+
+        # Switch to capstone mode
+        at.radio(key="radio_setup_mode").set_value("Set up Capstone").run()
+        assert at.session_state.step == 0
+
+    def test_capstone_mode_landing_page(self):
+        """Capstone landing page shows warning about pre-Feb-2026 students."""
+        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at.run()
+
+        # Switch to capstone mode
+        at.radio(key="radio_setup_mode").set_value("Set up Capstone").run()
+
+        # Check for capstone-specific content
+        all_markdown = " ".join([m.value for m in at.markdown])
+        assert "before 20 February 2026" in all_markdown
+        assert "AIRSTATS" in all_markdown
+
+
+class TestStandardSetupSteps:
+    """Test the standard setup step navigation (now 3 steps instead of 4)."""
+
+    def test_step_1_has_keypair_expander(self):
+        """Step 1 contains keypair generation in an expander, not a separate step."""
+        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at.run()
+
+        # Go to step 1
+        at.button(key="btn_start_setup").click().run()
+        assert at.session_state.step == 1
+
+        # Keypair should be generated
+        assert "keypair" in at.session_state
+
+        # Step 1 header should say "Snowflake Setup", not "Generate Keys"
+        all_markdown = " ".join([m.value for m in at.markdown])
+        assert "Step 1: Snowflake Setup" in all_markdown
+
+    def test_step_1_is_snowflake_setup_not_keypair(self):
+        """Step 1 is now Snowflake setup (credentials form), not keypair generation."""
+        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at.run()
+
+        # Go to step 1
+        at.button(key="btn_start_setup").click().run()
+        assert at.session_state.step == 1
+
+        # Should have credentials form elements
+        assert at.text_input(key="input_snowflake_account") is not None
+        assert at.text_input(key="input_snowflake_username") is not None
+        assert at.text_input(key="input_snowflake_password") is not None
+
+    def test_no_separate_keypair_step(self):
+        """There should be no separate keypair step (no btn_continue_to_snowflake)."""
+        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at.run()
+
+        # Go to step 1
+        at.button(key="btn_start_setup").click().run()
+
+        # The old "Continue to Snowflake Setup" button should NOT exist
+        try:
+            at.button(key="btn_continue_to_snowflake")
+            pytest.fail("btn_continue_to_snowflake should not exist in new flow")
+        except KeyError:
+            pass  # Expected
 
 
 class TestSqlSectionParsing:
@@ -103,6 +201,7 @@ class TestSqlSectionParsing:
 class TestCeuModeFullFlow:
     """Test full CEU mode flow with Snowflake (integration test)."""
 
+    @pytest.mark.ceu
     def test_ceu_complete_setup_flow(self, snowflake_credentials):
         """Test CEU mode creates AIRSTATS database alongside AIRBNB."""
         at = AppTest.from_file("streamlit_app.py", default_timeout=30)
@@ -115,9 +214,6 @@ class TestCeuModeFullFlow:
         # Navigate through steps
         at.button(key="btn_start_setup").click().run()
         assert at.session_state.step == 1
-
-        at.button(key="btn_continue_to_snowflake").click().run()
-        assert at.session_state.step == 2
 
         # Enter credentials
         at.text_input(key="input_snowflake_account").set_value(
@@ -142,7 +238,7 @@ class TestCeuModeFullFlow:
             error_messages = [e.value for e in at.error]
             pytest.fail(f"Setup showed errors: {error_messages}")
 
-        # Verify we reached step 3
-        assert at.session_state.step == 3, (
-            f"Expected step 3, got step {at.session_state.step}"
+        # Verify we reached step 2
+        assert at.session_state.step == 2, (
+            f"Expected step 2, got step {at.session_state.step}"
         )

@@ -8,6 +8,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "ceu: CEU mode tests (only run with [testceu] in commit)")
+
+
 @pytest.fixture(scope="session")
 def snowflake_credentials():
     """Load credentials from env (GitHub secrets) or .env (local).
