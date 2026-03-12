@@ -9,7 +9,7 @@ dependencies = [
     "snowflake-sqlalchemy==1.8.2",
     "snowflake-connector-python==4.2.0",
     "pydantic==2.12.5",
-    "cryptography==46.0.3",
+    "cryptography==46.0.5",
     "pyyaml==6.0.3",
     "watchdog",
     # Security fixes for transitive dependencies
