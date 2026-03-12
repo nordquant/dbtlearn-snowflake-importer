@@ -156,22 +156,20 @@ class TestPresetRecoveryUI:
         uploader = at.get("file_uploader")
         assert len(uploader) > 0, "Expected file uploader on default landing page"
 
-    def test_recovery_expander_on_ceu_landing(self):
-        """CEU mode landing page has the upload_profiles_yml file uploader."""
+    def test_no_recovery_in_ceu_mode(self):
+        """CEU mode has no preset recovery tab (no file uploader)."""
         at = AppTest.from_file("streamlit_app.py", default_timeout=30)
         at.query_params["course"] = "ceu"
         at.run()
 
         uploader = at.get("file_uploader")
-        assert len(uploader) > 0, "Expected file uploader on CEU landing page"
+        assert len(uploader) == 0, "CEU mode should not have file uploader"
 
     def test_recovery_expander_on_capstone_landing(self):
-        """Capstone mode landing page has the upload_profiles_yml file uploader."""
+        """Capstone tab has the upload_profiles_yml file uploader."""
         at = AppTest.from_file("streamlit_app.py", default_timeout=30)
         at.run()
 
-        # Switch to capstone mode
-        at.radio(key="radio_setup_mode").set_value("Set up Capstone").run()
-
+        # With tabs, capstone content is rendered — file uploader should be present
         uploader = at.get("file_uploader")
         assert len(uploader) > 0, "Expected file uploader on capstone landing page"

@@ -53,51 +53,51 @@ class TestCourseModeDetection:
 
 
 class TestModeSelection:
-    """Test mode selection behavior."""
+    """Test tab-based mode selection behavior."""
 
-    def test_mode_selector_renders_in_default_mode(self):
-        """Mode selector renders when not in CEU mode."""
+    def test_tabs_render_in_default_mode(self):
+        """Default mode renders tabs for all setup options."""
         at = AppTest.from_file("streamlit_app.py", default_timeout=30)
         at.run()
 
-        radio = at.radio(key="radio_setup_mode")
-        assert radio is not None
-        assert radio.value == "Standard Setup"
+        # Both standard and capstone buttons should be accessible (tabs render all content)
+        assert at.button(key="btn_start_setup") is not None
+        assert at.button(key="btn_start_capstone") is not None
 
-    def test_no_mode_selector_in_ceu_mode(self):
-        """No mode selector when ?course=ceu."""
+    def test_no_tabs_in_ceu_mode(self):
+        """CEU mode has no capstone tab — only standard setup."""
         at = AppTest.from_file("streamlit_app.py", default_timeout=30)
         at.query_params["course"] = "ceu"
         at.run()
 
+        # Standard setup button should exist
+        assert at.button(key="btn_start_setup") is not None
+
+        # Capstone button should NOT exist
         try:
-            at.radio(key="radio_setup_mode")
-            pytest.fail("Mode selector should not exist in CEU mode")
+            at.button(key="btn_start_capstone")
+            pytest.fail("Capstone button should not exist in CEU mode")
         except KeyError:
             pass  # Expected
 
-    def test_switching_modes_resets_step(self):
-        """Switching between modes resets step to 0."""
+    def test_tabs_have_independent_state(self):
+        """Standard and capstone tabs maintain independent step state."""
         at = AppTest.from_file("streamlit_app.py", default_timeout=30)
         at.run()
 
-        # Start in standard mode, go to step 1
+        # Start standard setup
         at.button(key="btn_start_setup").click().run()
-        assert at.session_state.step == 1
+        assert at.session_state.step_standard == 1
 
-        # Switch to capstone mode
-        at.radio(key="radio_setup_mode").set_value("Set up Capstone").run()
-        assert at.session_state.step == 0
+        # Capstone should still be at step 0
+        assert at.session_state.step_capstone == 0
 
-    def test_capstone_mode_landing_page(self):
-        """Capstone landing page shows warning about pre-Feb-2026 students."""
+    def test_capstone_tab_landing_page(self):
+        """Capstone tab shows warning about pre-Feb-2026 students."""
         at = AppTest.from_file("streamlit_app.py", default_timeout=30)
         at.run()
 
-        # Switch to capstone mode
-        at.radio(key="radio_setup_mode").set_value("Set up Capstone").run()
-
-        # Check for capstone-specific content
+        # With tabs, capstone content is rendered directly
         all_markdown = " ".join([m.value for m in at.markdown])
         assert "before 20 February 2026" in all_markdown
         assert "AIRSTATS" in all_markdown
@@ -113,7 +113,7 @@ class TestStandardSetupSteps:
 
         # Go to step 1
         at.button(key="btn_start_setup").click().run()
-        assert at.session_state.step == 1
+        assert at.session_state.step_standard == 1
 
         # Keypair should be generated
         assert "keypair" in at.session_state
@@ -129,12 +129,12 @@ class TestStandardSetupSteps:
 
         # Go to step 1
         at.button(key="btn_start_setup").click().run()
-        assert at.session_state.step == 1
+        assert at.session_state.step_standard == 1
 
-        # Should have credentials form elements
-        assert at.text_input(key="input_snowflake_account") is not None
-        assert at.text_input(key="input_snowflake_username") is not None
-        assert at.text_input(key="input_snowflake_password") is not None
+        # Should have credentials form elements (std_ prefix for standard tab)
+        assert at.text_input(key="std_input_snowflake_account") is not None
+        assert at.text_input(key="std_input_snowflake_username") is not None
+        assert at.text_input(key="std_input_snowflake_password") is not None
 
     def test_no_separate_keypair_step(self):
         """There should be no separate keypair step (no btn_continue_to_snowflake)."""
@@ -213,16 +213,16 @@ class TestCeuModeFullFlow:
 
         # Navigate through steps
         at.button(key="btn_start_setup").click().run()
-        assert at.session_state.step == 1
+        assert at.session_state.step_standard == 1
 
-        # Enter credentials
-        at.text_input(key="input_snowflake_account").set_value(
+        # Enter credentials (std_ prefix — CEU uses standard_setup)
+        at.text_input(key="std_input_snowflake_account").set_value(
             snowflake_credentials["account"]
         )
-        at.text_input(key="input_snowflake_username").set_value(
+        at.text_input(key="std_input_snowflake_username").set_value(
             snowflake_credentials["username"]
         )
-        at.text_input(key="input_snowflake_password").set_value(
+        at.text_input(key="std_input_snowflake_password").set_value(
             snowflake_credentials["password"]
         )
         at.run()
@@ -239,6 +239,6 @@ class TestCeuModeFullFlow:
             pytest.fail(f"Setup showed errors: {error_messages}")
 
         # Verify we reached step 2
-        assert at.session_state.step == 2, (
-            f"Expected step 2, got step {at.session_state.step}"
+        assert at.session_state.step_standard == 2, (
+            f"Expected step 2, got step {at.session_state.step_standard}"
         )

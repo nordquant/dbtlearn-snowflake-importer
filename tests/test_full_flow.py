@@ -23,24 +23,21 @@ class TestFullSetupFlow:
         # Verify app started without errors
         assert not at.exception, f"App failed to start: {at.exception}"
 
-        # Mode selector should be present
-        assert at.radio(key="radio_setup_mode").value == "Standard Setup"
-
         # Step 0 -> Step 1: Click "Start Setup Process"
         at.button(key="btn_start_setup").click().run()
-        assert at.session_state.step == 1
+        assert at.session_state.step_standard == 1
 
         # Step 1: Keys should be auto-generated, keypair in expander
         assert "keypair" in at.session_state, "Keypair should be generated"
 
-        # Enter Snowflake credentials
-        at.text_input(key="input_snowflake_account").set_value(
+        # Enter Snowflake credentials (std_ prefix for standard setup tab)
+        at.text_input(key="std_input_snowflake_account").set_value(
             snowflake_credentials["account"]
         )
-        at.text_input(key="input_snowflake_username").set_value(
+        at.text_input(key="std_input_snowflake_username").set_value(
             snowflake_credentials["username"]
         )
-        at.text_input(key="input_snowflake_password").set_value(
+        at.text_input(key="std_input_snowflake_password").set_value(
             snowflake_credentials["password"]
         )
         at.run()
@@ -58,8 +55,8 @@ class TestFullSetupFlow:
             pytest.fail(f"Snowflake setup showed errors: {error_messages}")
 
         # Verify we reached step 2 (download configuration files)
-        assert at.session_state.step == 2, (
-            f"Expected step 2, got step {at.session_state.step}"
+        assert at.session_state.step_standard == 2, (
+            f"Expected step 2, got step {at.session_state.step_standard}"
         )
 
         # Verify keypair and account are in session state (needed for downloads)
@@ -68,7 +65,7 @@ class TestFullSetupFlow:
 
     def test_capstone_only_flow(self, snowflake_credentials):
         """
-        Test the capstone-only flow via "Set up Capstone" sidebar option:
+        Test the capstone-only flow via "Capstone Only Setup" tab:
         1. Landing page with warning (step 0 -> step 1)
         2. Credentials + AIRSTATS SQL execution
 
@@ -80,25 +77,20 @@ class TestFullSetupFlow:
         # Verify app started without errors
         assert not at.exception, f"App failed to start: {at.exception}"
 
-        # Switch to capstone mode via sidebar radio
-        at.radio(key="radio_setup_mode").set_value("Set up Capstone").run()
-
-        # Verify capstone landing page content
-        all_markdown = " ".join([m.value for m in at.markdown])
-        assert "before 20 February 2026" in all_markdown
+        # With st.tabs, all tab content is rendered — capstone elements are accessible directly
 
         # Step 0 -> Step 1: Click "Set up AIRSTATS Capstone"
         at.button(key="btn_start_capstone").click().run()
-        assert at.session_state.step == 1
+        assert at.session_state.step_capstone == 1
 
-        # Enter Snowflake credentials
-        at.text_input(key="input_snowflake_account").set_value(
+        # Enter Snowflake credentials (cap_ prefix for capstone tab)
+        at.text_input(key="cap_input_snowflake_account").set_value(
             snowflake_credentials["account"]
         )
-        at.text_input(key="input_snowflake_username").set_value(
+        at.text_input(key="cap_input_snowflake_username").set_value(
             snowflake_credentials["username"]
         )
-        at.text_input(key="input_snowflake_password").set_value(
+        at.text_input(key="cap_input_snowflake_password").set_value(
             snowflake_credentials["password"]
         )
         at.run()
@@ -145,19 +137,21 @@ class TestFullSetupFlow:
 
         # Step 0 -> Step 1: Click "Start Setup Process"
         at.button(key="btn_start_setup").click().run()
-        assert at.session_state.step == 1
+        assert at.session_state.step_standard == 1
 
         # Step 1: Keys should be auto-generated
         assert "keypair" in at.session_state, "Keypair should be generated"
 
-        # Enter credentials
-        at.text_input(key="input_snowflake_account").set_value(
+        # Enter credentials (CEU uses standard_setup which has std_ prefix,
+        # but in CEU mode there are no tabs so no prefix conflict — however
+        # standard_setup always uses std_ prefix)
+        at.text_input(key="std_input_snowflake_account").set_value(
             snowflake_credentials["account"]
         )
-        at.text_input(key="input_snowflake_username").set_value(
+        at.text_input(key="std_input_snowflake_username").set_value(
             snowflake_credentials["username"]
         )
-        at.text_input(key="input_snowflake_password").set_value(
+        at.text_input(key="std_input_snowflake_password").set_value(
             snowflake_credentials["password"]
         )
         at.run()
@@ -176,6 +170,6 @@ class TestFullSetupFlow:
             pytest.fail(f"Setup showed errors: {error_messages}")
 
         # Verify we reached step 2
-        assert at.session_state.step == 2, (
-            f"Expected step 2, got step {at.session_state.step}"
+        assert at.session_state.step_standard == 2, (
+            f"Expected step 2, got step {at.session_state.step_standard}"
         )
