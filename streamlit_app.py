@@ -322,7 +322,7 @@ hello_msg_capstone = """
 # dbt (Data Build Tool) Bootcamp
 ## Set up Capstone (AIRSTATS Database)
 
-**This mode is only for students who started the course before 20 February 2026.**
+**This mode is only for students who started the course before 14 March 2026.**
 
 If you started after that date, the AIRSTATS capstone database was already set up as part of the standard setup. You don't need to run this again.
 
