@@ -119,11 +119,10 @@ class TestProductionE2E:
         Steps:
         1. Navigate to production site
         2. Click "Start Setup Process"
-        3. Click "Continue to Snowflake Setup"
-        4. Enter Snowflake credentials
-        5. Click "Start Setup"
-        6. Wait for setup to complete
-        7. Verify we reach the download configuration step
+        3. Enter Snowflake credentials
+        4. Click "Start Setup"
+        5. Wait for setup to complete
+        6. Verify we reach the download configuration step
         """
         page = browser_context.new_page()
 
@@ -149,21 +148,12 @@ class TestProductionE2E:
             start_button = page.get_by_role("button", name="Start Setup Process")
             start_button.click()
 
-            # Wait for step 1 (key generation) to appear
-            page.wait_for_selector("text=Generate Snowflake Access Keys", timeout=PAGE_TIMEOUT)
-            print("Key generation step reached")
-
-            # Step 3: Click "Continue to Snowflake Setup"
-            print("Step 3: Clicking 'Continue to Snowflake Setup'...")
-            continue_button = page.get_by_role("button", name="Continue to Snowflake Setup")
-            continue_button.click()
-
-            # Wait for Snowflake setup form to appear
+            # Wait for Snowflake setup form to appear (keypair is generated silently)
             page.wait_for_selector("text=Snowflake Setup", timeout=PAGE_TIMEOUT)
             print("Snowflake setup form loaded")
 
-            # Step 4: Enter Snowflake credentials
-            print("Step 4: Entering Snowflake credentials...")
+            # Step 3: Enter Snowflake credentials
+            print("Step 3: Entering Snowflake credentials...")
 
             # Wait for Streamlit to render the form inputs
             # Streamlit needs time to render form elements after navigation
@@ -194,13 +184,13 @@ class TestProductionE2E:
 
             print(f"Credentials entered for account: {snowflake_credentials['account']}")
 
-            # Step 5: Click "Start Setup"
-            print("Step 5: Clicking 'Start Setup'...")
+            # Step 4: Click "Start Setup"
+            print("Step 4: Clicking 'Start Setup'...")
             setup_button = page.get_by_role("button", name="Start Setup")
             setup_button.click()
 
-            # Step 6: Wait for setup to complete
-            print("Step 6: Waiting for Snowflake setup to complete (this may take a few minutes)...")
+            # Step 5: Wait for setup to complete
+            print("Step 5: Waiting for Snowflake setup to complete (this may take a few minutes)...")
 
             # Poll for completion - check for success OR error states
             # The setup can take up to 5 minutes
@@ -256,8 +246,8 @@ class TestProductionE2E:
                     f"Screenshot saved to {screenshot_path}"
                 )
 
-            # Step 7: Verify we reached the download step
-            print("Step 7: Verifying download configuration step...")
+            # Step 6: Verify we reached the download step
+            print("Step 6: Verifying download configuration step...")
 
             # Check for download buttons or step 3 content
             download_content = page.locator("text=Download Configuration Files")
