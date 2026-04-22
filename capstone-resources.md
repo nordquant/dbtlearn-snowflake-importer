@@ -1,7 +1,6 @@
-# CEU Capstone - AIRSTATS Database Setup
+# Capstone - AIRSTATS Database Setup
 
-This file contains the SQL setup for the CEU Modern Data Platforms capstone project.
-It is only executed when accessing the setup via `?course=ceu` query parameter.
+This file contains the SQL setup for the dbt course's capstone project.
 
 ```sql {#capstone_airstats}
 -- AIRSTATS Database Setup for Snowflake
