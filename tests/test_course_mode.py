@@ -99,8 +99,37 @@ class TestModeSelection:
 
         # With tabs, capstone content is rendered directly
         all_markdown = " ".join([m.value for m in at.markdown])
-        assert "before 20 February 2026" in all_markdown
+        assert "before 14 March 2026" in all_markdown
         assert "AIRSTATS" in all_markdown
+
+    def test_legacy_tab_landing_page(self):
+        """Legacy tab shows username/password guidance on its landing page."""
+        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at.run()
+
+        assert at.button(key="btn_start_legacy") is not None
+        all_markdown = " ".join([m.value for m in at.markdown])
+        assert "Legacy Username/Password Setup" in all_markdown
+        assert "technical difficulties" in all_markdown
+
+    def test_legacy_tab_hidden_in_ceu_mode(self):
+        """CEU mode should not expose the legacy tab."""
+        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at.query_params["course"] = "ceu"
+        at.run()
+
+        with pytest.raises(KeyError):
+            at.button(key="btn_start_legacy")
+
+    def test_legacy_tab_independent_state(self):
+        """Starting the legacy flow doesn't advance standard/capstone steps."""
+        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at.run()
+
+        at.button(key="btn_start_legacy").click().run()
+        assert at.session_state.step_legacy == 1
+        assert at.session_state.step_standard == 0
+        assert at.session_state.step_capstone == 0
 
 
 class TestStandardSetupSteps:

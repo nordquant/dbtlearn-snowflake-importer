@@ -179,5 +179,33 @@ CREATE USER PRESET
         assert "<<Add Your Public Key File's content here>>" in all_commands_text
 
 
+class TestLegacySetupSection:
+    """Verify the legacy username/password SQL lives in its own file."""
+
+    def _load(self, filename):
+        import os
+        import sys
+
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from streamlit_app import get_sql_commands as real_get_sql_commands
+        from streamlit_app import CURRENT_DIR
+
+        with open(f"{CURRENT_DIR}/{filename}", "r") as f:
+            return real_get_sql_commands(f.read())
+
+    def test_snowflake_setup_legacy_parsed(self):
+        commands = self._load("course-resources-legacy.md")
+        assert "snowflake_setup_legacy" in commands
+        joined = " ".join(commands["snowflake_setup_legacy"]).upper()
+        assert "PASSWORD=" in joined
+        assert "LEGACY_SERVICE" in joined
+        assert "<<ADD YOUR PUBLIC KEY" not in joined
+
+    def test_course_resources_unchanged(self):
+        """Legacy section must live in the separate file, not course-resources.md."""
+        commands = self._load("course-resources.md")
+        assert "snowflake_setup_legacy" not in commands
+
+
 if __name__ == "__main__":
     pytest.main([__file__])

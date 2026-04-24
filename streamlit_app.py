@@ -52,15 +52,21 @@ def _generate_container_info_file():
 _generate_container_info_file()
 sql_sections = {
     "snowflake_setup": "Setting up the dbt User and Roles",
+    "snowflake_setup_legacy": "Setting up the dbt User and Roles (Username/Password)",
     "snowflake_import": "Importing Raw Tables",
     "capstone_airstats": "Importing AIRSTATS Capstone Tables",
 }
+
+# Default passwords for the legacy username/password flow. These values must
+# match the PASSWORD='...' literals in course-resources-legacy.md.
+LEGACY_USER_PASSWORDS = {"dbt": "dbtPassword123", "preset": "presetPassword123"}
 
 # SQL resource files configuration
 # Each entry: (filename, required_for_modes) where modes is a list or None for always required
 SQL_RESOURCE_FILES = [
     ("course-resources.md", None),  # Always required
     ("capstone-resources.md", None),  # Always required (capstone is now part of standard course)
+    ("course-resources-legacy.md", None),  # Legacy username/password flow
 ]
 
 
@@ -181,6 +187,28 @@ def get_snowflake_connection(account, username, password, passcode=None):
         connect_args["passcode"] = passcode
 
     engine = create_engine(connection_string, connect_args=connect_args)
+    connection = engine.connect()
+
+    try:
+        yield connection
+    finally:
+        connection.close()
+        engine.dispose()
+
+
+@contextmanager
+def get_user_password_connection(account, login_name, password, role):
+    """Connect to Snowflake as a non-admin user using password authentication."""
+    encoded_login_name = quote_plus(login_name)
+    encoded_password = quote_plus(password)
+    encoded_account = quote_plus(account)
+
+    connection_string = (
+        f"snowflake://{encoded_login_name}:{encoded_password}@{encoded_account}/AIRBNB?"
+        f"role={role}&warehouse=COMPUTE_WH&account_identifier={encoded_account}"
+    )
+
+    engine = create_engine(connection_string)
     connection = engine.connect()
 
     try:
@@ -332,6 +360,20 @@ This wizard will:
 * Connect to your Snowflake account
 * Create the `AIRSTATS` database with airport data tables
 * Grant the necessary permissions to your `dbt` and `preset` users
+"""
+
+hello_msg_legacy = """
+# dbt Bootcamp – Legacy Username/Password Setup
+
+**This mode is only for students whose system runs into technical difficulties using Snowflake with public-key authentication.**
+
+This wizard will:
+* Create `dbt` and `preset` users authenticated by **password**
+  (`dbtPassword123` / `presetPassword123`), with `TYPE = LEGACY_SERVICE`
+* Import the AirBnB raw tables and the AIRSTATS capstone database
+* Grant the usual `TRANSFORM` and `REPORTER` permissions
+
+At the end, you'll configure Preset with username + password (no download).
 """
 
 
@@ -524,38 +566,35 @@ def _verify_tables(connection, tables):
     return True
 
 
-def _verify_user_connections(session_id, hostname):
-    """Verify dbt and preset user connections. Returns True on success."""
+def _verify_user_connections(session_id, conn_builder):
+    """Verify dbt and preset user connections via a caller-supplied builder.
+
+    ``conn_builder(login_name, role)`` must return a context manager that
+    yields a SQLAlchemy Connection. This lets the same verification loop
+    work for both keypair and password-based auth.
+    """
     try:
-        private_key_pem = st.session_state.keypair.private_key
-        for users in [
+        for login_name, role, schema in [
             ("dbt", "TRANSFORM", "RAW"),
             ("preset", "REPORTER", "DEV"),
         ]:
             with st.status(
-                f"Verifying connection with {users[0]} user"
+                f"Verifying connection with {login_name} user"
             ) as internal_status_spinner:
-                with get_dbt_connection(
-                    hostname, users[0], users[1], private_key_pem
-                ) as dbt_connection:
-                    dbt_connection.execute(
-                        text(f"USE ROLE {users[1]}")
-                    )
-                    dbt_connection.execute(
-                        text(f"USE DATABASE AIRBNB")
-                    )
-                    dbt_connection.execute(
-                        text(f"USE SCHEMA {users[2]}")
-                    )
+                with conn_builder(login_name, role) as user_connection:
+                    user_connection.execute(text(f"USE ROLE {role}"))
+                    user_connection.execute(text("USE DATABASE AIRBNB"))
+                    user_connection.execute(text(f"USE SCHEMA {schema}"))
 
-                    if users[0] == "dbt":
+                    if login_name == "dbt":
                         # Query RAW_LISTINGS table using dbt user
-                        query = "SELECT * FROM RAW.RAW_LISTINGS"
-                        dbt_result = dbt_connection.execute(text(query))
-                        dbt_result.fetchone()
+                        result = user_connection.execute(
+                            text("SELECT * FROM RAW.RAW_LISTINGS")
+                        )
+                        result.fetchone()
 
                 internal_status_spinner.success(
-                    f"Success connecting as {users[0]} user"
+                    f"Success connecting as {login_name} user"
                 )
         return True
 
@@ -729,8 +768,14 @@ def standard_setup(session_id):
                     if not _verify_tables(connection, airstats_tables):
                         return
 
-                    # Verify user connections
-                    if not _verify_user_connections(session_id, hostname):
+                    # Verify user connections using keypair auth
+                    private_key_pem = st.session_state.keypair.private_key
+                    if not _verify_user_connections(
+                        session_id,
+                        lambda login, role: get_dbt_connection(
+                            hostname, login, role, private_key_pem
+                        ),
+                    ):
                         status_spinner.update(
                             label="Error verifying user connections",
                             state="error",
@@ -923,6 +968,138 @@ def capstone_setup(session_id):
                 )
 
 
+def legacy_setup(session_id):
+    """Legacy flow: creates dbt/preset users with password auth instead of keypair."""
+
+    if "step_legacy" not in st.session_state:
+        st.session_state.step_legacy = 0
+
+    # Step 0: Landing
+    if st.session_state.step_legacy == 0:
+        st.markdown(hello_msg_legacy)
+        if st.button(
+            "Start Legacy Setup",
+            type="primary",
+            use_container_width=True,
+            key="btn_start_legacy",
+        ):
+            st.session_state.step_legacy = 1
+            st.rerun()
+        return
+
+    # Step 1: Credentials + SQL execution
+    legacy_setup_complete = False
+    st.markdown("### Legacy Username/Password Snowflake Setup")
+
+    if st.button(
+        "Back to Welcome",
+        type="secondary",
+        key="btn_legacy_back_to_welcome",
+    ):
+        st.session_state.step_legacy = 0
+        st.rerun()
+
+    hostname, username, password, passcode = render_credentials_form(key_prefix="leg_")
+
+    if not st.button("Start Setup", key="btn_start_legacy_setup"):
+        return
+    if len(password) == 0:
+        st.error("Please provide a password")
+        return
+
+    # Merge SQL from the three source files
+    sql_commands = {}
+    for fname in (
+        "course-resources.md",
+        "course-resources-legacy.md",
+        "capstone-resources.md",
+    ):
+        fpath = os.path.join(CURRENT_DIR, fname)
+        if not os.path.exists(fpath):
+            st.error(f"Missing required file: {fname}")
+            logging.error(f"{session_id}: Missing SQL resource file {fpath}")
+            return
+        with open(fpath, "r") as f:
+            sql_commands.update(get_sql_commands(f.read().rstrip()))
+
+    result = _connect_to_snowflake(session_id, hostname, username, password, passcode)
+    if result is None:
+        return
+    connection_cm, connection = result
+
+    try:
+        with st.status(
+            "Setting up your Snowflake account (this can take up to 2 minutes)"
+        ) as status_spinner:
+            # Order matters: snowflake_import DROPs+recreates AIRBNB, so grants
+            # in snowflake_setup_legacy must run AFTER it (matches standard flow).
+            sections_to_run = [
+                "snowflake_import",
+                "snowflake_setup_legacy",
+                "capstone_airstats",
+            ]
+            if not _execute_sql_sections(
+                session_id, connection, sql_commands, sections_to_run
+            ):
+                status_spinner.update(
+                    label="Error executing command",
+                    state="error",
+                    expanded=True,
+                )
+                return
+
+            airbnb_tables = [
+                "AIRBNB.RAW.RAW_LISTINGS",
+                "AIRBNB.RAW.RAW_HOSTS",
+                "AIRBNB.RAW.RAW_REVIEWS",
+            ]
+            if not _verify_tables(connection, airbnb_tables):
+                return
+
+            airstats_tables = [
+                "AIRSTATS.RAW.AIRPORTS",
+                "AIRSTATS.RAW.AIRPORT_COMMENTS",
+                "AIRSTATS.RAW.RUNWAYS",
+            ]
+            if not _verify_tables(connection, airstats_tables):
+                return
+
+            # Same verification loop as the keypair flow, password-based builder
+            if not _verify_user_connections(
+                session_id,
+                lambda login, role: get_user_password_connection(
+                    hostname, login, LEGACY_USER_PASSWORDS[login], role
+                ),
+            ):
+                status_spinner.update(
+                    label="Error verifying user connections",
+                    state="error",
+                    expanded=True,
+                )
+                return
+
+            legacy_setup_complete = True
+    finally:
+        connection_cm.__exit__(None, None, None)
+
+    if legacy_setup_complete:
+        success_msg = "Legacy Snowflake setup complete!"
+        st.toast(success_msg, icon="🔥")
+        status_spinner.success(success_msg, icon="🔥")
+
+        st.success("Snowflake is set up with username/password authentication.")
+        st.markdown(
+            f"""**Use these credentials** when configuring dbt and Preset:
+
+* **Account**: `{hostname}`
+* **dbt user** — username `dbt`, password `dbtPassword123`, role `TRANSFORM`
+* **Preset user** — username `preset`, password `presetPassword123`, role `REPORTER`
+
+In Preset, pick **Username & Password** authentication and plug in the
+`preset` credentials above. No file downloads needed."""
+        )
+
+
 def main():
     session_id = streamlit_session_id()
     logger.info("Starting Streamlit app")
@@ -942,13 +1119,20 @@ def main():
         # CEU: standard setup with CEU branding, no tabs
         standard_setup(session_id)
     else:
-        tab_default, tab_capstone, tab_preset = st.tabs(
-            ["Default Setup", "Capstone Only Setup", "Re-download Preset Instructions"]
+        tab_default, tab_capstone, tab_legacy, tab_preset = st.tabs(
+            [
+                "Default Setup",
+                "Capstone Only Setup",
+                "Legacy Username/Password Setup",
+                "Re-download Preset Instructions",
+            ]
         )
         with tab_default:
             standard_setup(session_id)
         with tab_capstone:
             capstone_setup(session_id)
+        with tab_legacy:
+            legacy_setup(session_id)
         with tab_preset:
             _render_preset_recovery_standalone()
 

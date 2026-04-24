@@ -5,6 +5,18 @@ from streamlit.testing.v1 import AppTest
 SNOWFLAKE_SETUP_TIMEOUT = 300
 
 
+def _user_type(connection, login_name):
+    """Return the TYPE column from DESCRIBE USER for a given login_name."""
+    from sqlalchemy import text
+
+    rows = connection.execute(text(f"DESCRIBE USER {login_name}")).fetchall()
+    for row in rows:
+        # DESCRIBE USER returns rows with a `property` column; find TYPE
+        if str(row[0]).upper() == "TYPE":
+            return str(row[1]).upper() if row[1] is not None else None
+    return None
+
+
 class TestFullSetupFlow:
     """Test the complete Streamlit app flow using AppTest."""
 
@@ -112,6 +124,64 @@ class TestFullSetupFlow:
         assert any("AIRSTATS" in msg for msg in success_messages), (
             f"Expected AIRSTATS success message, got: {success_messages}"
         )
+
+    def test_legacy_setup_flow(self, snowflake_credentials):
+        """
+        Legacy username/password flow via the "Legacy Username/Password Setup" tab:
+        1. Land (step 0) -> click "Start Legacy Setup" -> step 1
+        2. Fill admin credentials, run setup
+        3. Verify: no exceptions, no error panels, success message mentions
+           both credential pairs, dbt and preset users end up with
+           TYPE=LEGACY_SERVICE.
+        """
+        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at.run()
+        assert not at.exception, f"App failed to start: {at.exception}"
+
+        at.button(key="btn_start_legacy").click().run()
+        assert at.session_state.step_legacy == 1
+
+        at.text_input(key="leg_input_snowflake_account").set_value(
+            snowflake_credentials["account"]
+        )
+        at.text_input(key="leg_input_snowflake_username").set_value(
+            snowflake_credentials["username"]
+        )
+        at.text_input(key="leg_input_snowflake_password").set_value(
+            snowflake_credentials["password"]
+        )
+        at.run()
+
+        at.button(key="btn_start_legacy_setup").click().run(
+            timeout=SNOWFLAKE_SETUP_TIMEOUT
+        )
+
+        assert not at.exception, f"Legacy setup raised exception: {at.exception}"
+
+        if len(at.error) > 0:
+            error_messages = [e.value for e in at.error]
+            pytest.fail(f"Legacy setup showed errors: {error_messages}")
+
+        # Success panel should mention the two credential pairs, not a download
+        markdown_text = " ".join([m.value for m in at.markdown])
+        assert "dbtPassword123" in markdown_text
+        assert "presetPassword123" in markdown_text
+        assert "Username & Password" in markdown_text
+
+        # DB-level sanity: both users should now be LEGACY_SERVICE
+        from sqlalchemy import text
+
+        from streamlit_app import get_snowflake_connection
+
+        with get_snowflake_connection(
+            snowflake_credentials["account"],
+            snowflake_credentials["username"],
+            snowflake_credentials["password"],
+        ) as conn:
+            dbt_type = _user_type(conn, "dbt")
+            preset_type = _user_type(conn, "preset")
+            assert dbt_type == "LEGACY_SERVICE", f"dbt user type is {dbt_type}"
+            assert preset_type == "LEGACY_SERVICE", f"preset user type is {preset_type}"
 
     @pytest.mark.ceu
     def test_ceu_setup_flow(self, snowflake_credentials):
