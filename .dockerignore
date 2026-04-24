@@ -33,9 +33,8 @@ docker-compose*.yml
 .gitlab-ci.yml
 
 # Documentation
-*.md
-!course-resources.md
-!capstone-resources.md
+CLAUDE.md
+README.md
 docs/
 
 # Tests
