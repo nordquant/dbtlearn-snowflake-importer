@@ -137,6 +137,96 @@ def parse_profiles_yml(profiles_content: str) -> tuple[str, str]:
     return account, private_key_pem_text
 
 
+def parse_profiles_yml_full(profiles_content: str) -> dict:
+    """Parse profiles.yml and return all fields needed for env scripts.
+
+    Unlike parse_profiles_yml(), this preserves real newlines in private_key
+    because shell scripts (bash, PowerShell) need a real PEM block, not a
+    literal-\\n single line.
+
+    Returns dict with keys: account, user, private_key, private_key_passphrase.
+    Defaults user to "dbt" and passphrase to "q" to match profiles.template.yml.
+    Raises ValueError on invalid input.
+    """
+    try:
+        parsed = yaml.safe_load(profiles_content)
+    except yaml.YAMLError as e:
+        raise ValueError(f"Invalid YAML format: {e}")
+
+    try:
+        dev_config = parsed["airbnb"]["outputs"]["dev"]
+    except (KeyError, TypeError):
+        raise ValueError(
+            "Invalid profiles.yml structure. Expected airbnb.outputs.dev hierarchy."
+        )
+
+    account = dev_config.get("account")
+    if not account:
+        raise ValueError("Missing 'account' field in profiles.yml")
+
+    private_key = dev_config.get("private_key")
+    if not private_key:
+        raise ValueError("Missing 'private_key' field in profiles.yml")
+
+    return {
+        "account": account,
+        "user": dev_config.get("user") or "dbt",
+        "private_key": private_key,
+        "private_key_passphrase": dev_config.get("private_key_passphrase") or "q",
+    }
+
+
+def generate_set_env_sh(values: dict) -> str:
+    """Generate a bash/zsh script that exports Snowflake env vars.
+
+    Students dot-source it: `source set-env.sh`. The PEM goes inside a plain
+    double-quoted string — bash preserves embedded newlines.
+    """
+    pem = values["private_key"]
+    if not pem.endswith("\n"):
+        pem += "\n"
+
+    return (
+        "#!/usr/bin/env bash\n"
+        "# Source this file before running dbt:\n"
+        "#   source set-env.sh\n"
+        "\n"
+        f'export SNOWFLAKE_ACCOUNT="{values["account"]}"\n'
+        f'export DBT_USER="{values["user"]}"\n'
+        f'export PRIVATE_KEY_PASSPHRASE="{values["private_key_passphrase"]}"\n'
+        f'export PRIVATE_KEY="{pem}"\n'
+    )
+
+
+def generate_set_env_ps1(values: dict) -> str:
+    """Generate a PowerShell script that sets Snowflake env vars.
+
+    Students dot-source it: `. .\\set-env.ps1`. The PEM goes inside a
+    here-string (@"..."@); the closing token must sit at column 0.
+    """
+
+    def esc(value: str) -> str:
+        return value.replace("`", "``").replace('"', '`"')
+
+    pem = values["private_key"]
+    if not pem.endswith("\n"):
+        pem += "\n"
+
+    return (
+        "# Dot-source this file before running dbt:\n"
+        "#   . .\\set-env.ps1\n"
+        "# First-time only (one-shot per machine):\n"
+        "#   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned\n"
+        "\n"
+        f'$env:SNOWFLAKE_ACCOUNT = "{esc(values["account"])}"\n'
+        f'$env:DBT_USER = "{esc(values["user"])}"\n'
+        f'$env:PRIVATE_KEY_PASSPHRASE = "{esc(values["private_key_passphrase"])}"\n'
+        f'$env:PRIVATE_KEY = @"\n'
+        f"{pem}"
+        '"@\n'
+    )
+
+
 def generate_preset_instructions(
     snowflake_account: str, private_key_pem_text: str
 ) -> str:
@@ -643,6 +733,55 @@ def _render_preset_recovery_standalone():
             st.error(f"Could not parse profiles.yml: {e}")
 
 
+def _render_env_scripts_standalone():
+    """Render the env-script download UI as a standalone tab.
+
+    Students upload the profiles.yml they got from the importer and download
+    a shell-native script (bash or PowerShell) that exports the Snowflake env
+    vars used by profiles.withenvs.yml in the dev-repo.
+    """
+    st.markdown(
+        "## Download env scripts\n\n"
+        "If you want to use `profiles.withenvs.yml` (which reads Snowflake "
+        "credentials from environment variables), upload your `profiles.yml` "
+        "below to download a script that sets those variables in your shell.\n\n"
+        "- **Mac / Linux**: `source set-env.sh`\n"
+        "- **Windows PowerShell**: `. .\\set-env.ps1`"
+    )
+    uploaded = st.file_uploader(
+        "Upload your profiles.yml",
+        type=["yml", "yaml"],
+        key="upload_profiles_yml_envscripts",
+    )
+    if uploaded is not None:
+        try:
+            content = uploaded.read().decode("utf-8")
+            values = parse_profiles_yml_full(content)
+            sh_script = generate_set_env_sh(values)
+            ps1_script = generate_set_env_ps1(values)
+
+            col_sh, col_ps1 = st.columns(2)
+            with col_sh:
+                st.download_button(
+                    label="Download set-env.sh (Mac/Linux)",
+                    data=sh_script,
+                    file_name="set-env.sh",
+                    mime="text/x-shellscript",
+                    key="btn_download_set_env_sh",
+                )
+            with col_ps1:
+                st.download_button(
+                    label="Download set-env.ps1 (Windows)",
+                    data=ps1_script,
+                    file_name="set-env.ps1",
+                    mime="text/plain",
+                    key="btn_download_set_env_ps1",
+                )
+            st.success("Env scripts generated successfully!")
+        except ValueError as e:
+            st.error(f"Could not parse profiles.yml: {e}")
+
+
 def standard_setup(session_id):
     """Standard setup flow: landing -> Snowflake setup (with keypair) -> download config files."""
     is_ceu_mode = st.session_state.course_mode == "ceu"
@@ -1119,12 +1258,13 @@ def main():
         # CEU: standard setup with CEU branding, no tabs
         standard_setup(session_id)
     else:
-        tab_default, tab_capstone, tab_legacy, tab_preset = st.tabs(
+        tab_default, tab_capstone, tab_legacy, tab_preset, tab_envscripts = st.tabs(
             [
                 "Default Setup",
                 "Capstone Only Setup",
                 "Legacy Username/Password Setup",
                 "Re-download Preset Instructions",
+                "Download env scripts",
             ]
         )
         with tab_default:
@@ -1135,6 +1275,8 @@ def main():
             legacy_setup(session_id)
         with tab_preset:
             _render_preset_recovery_standalone()
+        with tab_envscripts:
+            _render_env_scripts_standalone()
 
     # Development info footer
     st.markdown(
