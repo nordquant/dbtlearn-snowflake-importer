@@ -740,12 +740,43 @@ def _render_env_scripts_standalone():
     a shell-native script (bash or PowerShell) that exports the Snowflake env
     vars used by profiles.withenvs.yml in the dev-repo.
     """
-    st.markdown("## Download env scripts")
+    st.markdown("## Download env-var scripts")
     uploaded = st.file_uploader(
         "Upload your profiles.yml",
         type=["yml", "yaml"],
         key="upload_profiles_yml_envscripts",
     )
+    if uploaded is not None:
+        try:
+            content = uploaded.read().decode("utf-8")
+            values = parse_profiles_yml_full(content)
+            sh_script = generate_set_env_sh(values)
+            ps1_script = generate_set_env_ps1(values)
+
+            st.info(
+                "Save the downloaded file in your `course/` repo root — "
+                "alongside the `airbnb/` folder, not inside it."
+            )
+            col_sh, col_ps1 = st.columns(2)
+            with col_sh:
+                st.download_button(
+                    label="Download set-env.sh (Mac/Linux)",
+                    data=sh_script,
+                    file_name="set-env.sh",
+                    mime="text/x-shellscript",
+                    key="btn_download_set_env_sh",
+                )
+            with col_ps1:
+                st.download_button(
+                    label="Download set-env.ps1 (Windows)",
+                    data=ps1_script,
+                    file_name="set-env.ps1",
+                    mime="text/plain",
+                    key="btn_download_set_env_ps1",
+                )
+            st.success("Environment-variable setter scripts generated successfully!")
+        except ValueError as e:
+            st.error(f"Could not parse profiles.yml: {e}")
     st.markdown(
         "### Where to save the downloaded file\n\n"
         "Save it in the **root of your `course` repo** — the same folder that "
@@ -776,37 +807,6 @@ def _render_env_scripts_standalone():
         "- The script contains your Snowflake credentials. **Do not commit it** "
         "— add `set-env.sh` and `set-env.ps1` to your `.gitignore`."
     )
-    if uploaded is not None:
-        try:
-            content = uploaded.read().decode("utf-8")
-            values = parse_profiles_yml_full(content)
-            sh_script = generate_set_env_sh(values)
-            ps1_script = generate_set_env_ps1(values)
-
-            st.info(
-                "Save the downloaded file in your `course/` repo root — "
-                "alongside the `airbnb/` folder, not inside it."
-            )
-            col_sh, col_ps1 = st.columns(2)
-            with col_sh:
-                st.download_button(
-                    label="Download set-env.sh (Mac/Linux)",
-                    data=sh_script,
-                    file_name="set-env.sh",
-                    mime="text/x-shellscript",
-                    key="btn_download_set_env_sh",
-                )
-            with col_ps1:
-                st.download_button(
-                    label="Download set-env.ps1 (Windows)",
-                    data=ps1_script,
-                    file_name="set-env.ps1",
-                    mime="text/plain",
-                    key="btn_download_set_env_ps1",
-                )
-            st.success("Env scripts generated successfully!")
-        except ValueError as e:
-            st.error(f"Could not parse profiles.yml: {e}")
 
 
 def standard_setup(session_id):
@@ -1290,7 +1290,7 @@ def main():
                 "Default Setup",
                 "Capstone Only Setup",
                 "Re-download Preset Instructions",
-                "Download env scripts",
+                "Download env-var scripts",
                 "Legacy Username/Password Setup",
             ]
         )
