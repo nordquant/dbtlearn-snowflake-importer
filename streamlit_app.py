@@ -740,13 +740,13 @@ def _render_env_scripts_standalone():
     a shell-native script (bash or PowerShell) that exports the Snowflake env
     vars used by profiles.withenvs.yml in the dev-repo.
     """
+    st.markdown("## Download env scripts")
+    uploaded = st.file_uploader(
+        "Upload your profiles.yml",
+        type=["yml", "yaml"],
+        key="upload_profiles_yml_envscripts",
+    )
     st.markdown(
-        "## Download env scripts\n\n"
-        "If you want to use `profiles.withenvs.yml` (which reads Snowflake "
-        "credentials from environment variables), upload your `profiles.yml` "
-        "below to download a script that sets those variables in your shell. "
-        "Both dev-only and dev+prod `profiles.yml` files are accepted — the "
-        "scripts always use credentials from the `dev` target.\n\n"
         "### Where to save the downloaded file\n\n"
         "Save it in the **root of your `course` repo** — the same folder that "
         "contains the `airbnb/` directory, **not** inside `airbnb/`:\n\n"
@@ -775,11 +775,6 @@ def _render_env_scripts_standalone():
         "a new terminal and you'll need to source the script again.\n"
         "- The script contains your Snowflake credentials. **Do not commit it** "
         "— add `set-env.sh` and `set-env.ps1` to your `.gitignore`."
-    )
-    uploaded = st.file_uploader(
-        "Upload your profiles.yml",
-        type=["yml", "yaml"],
-        key="upload_profiles_yml_envscripts",
     )
     if uploaded is not None:
         try:
@@ -1290,25 +1285,25 @@ def main():
         # CEU: standard setup with CEU branding, no tabs
         standard_setup(session_id)
     else:
-        tab_default, tab_capstone, tab_legacy, tab_preset, tab_envscripts = st.tabs(
+        tab_default, tab_capstone, tab_preset, tab_envscripts, tab_legacy = st.tabs(
             [
                 "Default Setup",
                 "Capstone Only Setup",
-                "Legacy Username/Password Setup",
                 "Re-download Preset Instructions",
                 "Download env scripts",
+                "Legacy Username/Password Setup",
             ]
         )
         with tab_default:
             standard_setup(session_id)
         with tab_capstone:
             capstone_setup(session_id)
-        with tab_legacy:
-            legacy_setup(session_id)
         with tab_preset:
             _render_preset_recovery_standalone()
         with tab_envscripts:
             _render_env_scripts_standalone()
+        with tab_legacy:
+            legacy_setup(session_id)
 
     # Development info footer
     st.markdown(
