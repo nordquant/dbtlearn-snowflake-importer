@@ -744,9 +744,37 @@ def _render_env_scripts_standalone():
         "## Download env scripts\n\n"
         "If you want to use `profiles.withenvs.yml` (which reads Snowflake "
         "credentials from environment variables), upload your `profiles.yml` "
-        "below to download a script that sets those variables in your shell.\n\n"
-        "- **Mac / Linux**: `source set-env.sh`\n"
-        "- **Windows PowerShell**: `. .\\set-env.ps1`"
+        "below to download a script that sets those variables in your shell. "
+        "Both dev-only and dev+prod `profiles.yml` files are accepted — the "
+        "scripts always use credentials from the `dev` target.\n\n"
+        "### Where to save the downloaded file\n\n"
+        "Save it in the **root of your `course` repo** — the same folder that "
+        "contains the `airbnb/` directory, **not** inside `airbnb/`:\n\n"
+        "```\n"
+        "course/                  ← save set-env.sh / set-env.ps1 here\n"
+        "├── airbnb/\n"
+        "│   ├── dbt_project.yml\n"
+        "│   └── profiles.withenvs.yml\n"
+        "└── set-env.sh\n"
+        "```\n\n"
+        "### How to run it\n\n"
+        "Open a terminal in the `course/` folder, then:\n\n"
+        "- **macOS** (zsh / bash): `source ./set-env.sh`\n"
+        "- **Linux** (bash): `source ./set-env.sh`\n"
+        "- **Windows PowerShell**: `. .\\set-env.ps1`\n"
+        "  - First time only, per machine: "
+        "`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`\n\n"
+        "**Windows note:** the script **must run in PowerShell** — the old "
+        "`cmd.exe` (Command Prompt) does not understand `.ps1` files or the "
+        "`$env:` syntax. The good news: VS Code's default integrated terminal "
+        "on Windows is PowerShell, so opening **Terminal → New Terminal** "
+        "inside VS Code works out of the box. If you opened Command Prompt "
+        "by mistake, just type `powershell` to drop into a PowerShell session.\n\n"
+        "**Reminders:**\n"
+        "- The env vars only live in the **current terminal session** — open "
+        "a new terminal and you'll need to source the script again.\n"
+        "- The script contains your Snowflake credentials. **Do not commit it** "
+        "— add `set-env.sh` and `set-env.ps1` to your `.gitignore`."
     )
     uploaded = st.file_uploader(
         "Upload your profiles.yml",
@@ -760,6 +788,10 @@ def _render_env_scripts_standalone():
             sh_script = generate_set_env_sh(values)
             ps1_script = generate_set_env_ps1(values)
 
+            st.info(
+                "Save the downloaded file in your `course/` repo root — "
+                "alongside the `airbnb/` folder, not inside it."
+            )
             col_sh, col_ps1 = st.columns(2)
             with col_sh:
                 st.download_button(

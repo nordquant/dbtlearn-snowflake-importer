@@ -94,6 +94,43 @@ airbnb:
         with pytest.raises(ValueError, match="Missing 'private_key'"):
             parse_profiles_yml_full(yaml_content)
 
+    def test_parse_dev_and_prod_profile_extracts_dev(self):
+        """A profiles.yml with both dev and prod targets returns dev's values."""
+        yaml_content = """\
+airbnb:
+  outputs:
+    dev:
+      type: snowflake
+      account: dev-account-abc12345
+      user: dbt
+      role: TRANSFORM
+      private_key: "-----BEGIN ENCRYPTED PRIVATE KEY-----\\nDEVKEY\\n-----END ENCRYPTED PRIVATE KEY-----\\n"
+      private_key_passphrase: q
+      database: AIRBNB
+      schema: DEV
+      threads: 4
+      warehouse: COMPUTE_WH
+    prod:
+      type: snowflake
+      account: prod-account-xyz99999
+      user: dbt_prod
+      role: TRANSFORM
+      private_key: "-----BEGIN ENCRYPTED PRIVATE KEY-----\\nPRODKEY\\n-----END ENCRYPTED PRIVATE KEY-----\\n"
+      private_key_passphrase: prodpass
+      database: AIRBNB
+      schema: PROD
+      threads: 4
+      warehouse: COMPUTE_WH
+  target: dev
+"""
+        values = parse_profiles_yml_full(yaml_content)
+
+        assert values["account"] == "dev-account-abc12345"
+        assert values["user"] == "dbt"
+        assert values["private_key_passphrase"] == "q"
+        assert "DEVKEY" in values["private_key"]
+        assert "PRODKEY" not in values["private_key"]
+
 
 # ===========================================================================
 # Unit tests for generate_set_env_sh()

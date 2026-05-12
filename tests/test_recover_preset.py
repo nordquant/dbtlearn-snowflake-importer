@@ -120,6 +120,41 @@ airbnb:
         with pytest.raises(ValueError, match="Missing 'private_key'"):
             parse_profiles_yml(yaml_content)
 
+    def test_parse_dev_and_prod_profile_extracts_dev(self):
+        """A profiles.yml with both dev and prod targets returns dev's values."""
+        yaml_content = """\
+airbnb:
+  outputs:
+    dev:
+      type: snowflake
+      account: dev-account-abc12345
+      user: dbt
+      role: TRANSFORM
+      private_key: "-----BEGIN ENCRYPTED PRIVATE KEY-----\\nDEVKEY\\n-----END ENCRYPTED PRIVATE KEY-----\\n"
+      private_key_passphrase: q
+      database: AIRBNB
+      schema: DEV
+      threads: 4
+      warehouse: COMPUTE_WH
+    prod:
+      type: snowflake
+      account: prod-account-xyz99999
+      user: dbt
+      role: TRANSFORM
+      private_key: "-----BEGIN ENCRYPTED PRIVATE KEY-----\\nPRODKEY\\n-----END ENCRYPTED PRIVATE KEY-----\\n"
+      private_key_passphrase: q
+      database: AIRBNB
+      schema: PROD
+      threads: 4
+      warehouse: COMPUTE_WH
+  target: dev
+"""
+        account, key = parse_profiles_yml(yaml_content)
+
+        assert account == "dev-account-abc12345"
+        assert "DEVKEY" in key
+        assert "PRODKEY" not in key
+
 
 # ===========================================================================
 # Fixture-based regression test
