@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from logging import getLogger
 from urllib.parse import quote_plus
 
+import requests
 import streamlit as st
 import yaml
 from cryptography.hazmat.primitives import serialization
@@ -523,6 +524,50 @@ def render_credentials_form(key_prefix=""):
     return hostname, username, password, passcode
 
 
+FALLBACK_APP_URL = "https://udemy-dbt-setup.streamlit.app/"
+PRIMARY_HOST = "dbtsetup.nordquant.com"
+
+
+def _render_snowflake_fallback_notice():
+    """Show a notice + CTA suggesting the Streamlit Cloud fallback when Snowflake connection fails."""
+    st.warning(
+        f"This might indicate that Snowflake blocked our server. "
+        f"Please try again at [{FALLBACK_APP_URL}]({FALLBACK_APP_URL})."
+    )
+    st.link_button("Open the alternative setup app", FALLBACK_APP_URL, type="primary")
+
+
+def _notify_slack_of_connection_error(session_id, error_type, hostname, username, error):
+    """Post a Slack alert when Snowflake connection fails on the primary host.
+
+    No-op unless SLACK_WEBHOOK_URL is set and the request was served from PRIMARY_HOST.
+    """
+    webhook_url = os.environ.get("SLACK_WEBHOOK_URL")
+    if not webhook_url:
+        return
+    try:
+        request_host = (st.context.headers.get("host") or "").split(":")[0].lower()
+    except Exception:
+        request_host = ""
+    if request_host != PRIMARY_HOST:
+        return
+    error_orig = getattr(error, "orig", error)
+    payload = {
+        "text": (
+            f":warning: Snowflake connection error on `{PRIMARY_HOST}`\n"
+            f"*Error type:* {error_type}\n"
+            f"*Account:* `{hostname}`\n"
+            f"*Username:* `{username}`\n"
+            f"*Session:* `{session_id}`\n"
+            f"*Error:* ```{str(error_orig)[:1500]}```"
+        )
+    }
+    try:
+        requests.post(webhook_url, json=payload, timeout=5)
+    except Exception as slack_err:
+        logging.warning(f"{session_id}: Failed to post Slack notification: {slack_err}")
+
+
 def _connect_to_snowflake(session_id, hostname, username, password, passcode):
     """Attempt to connect to Snowflake. Returns (connection_cm, connection) or displays error and returns None."""
     try:
@@ -535,6 +580,8 @@ def _connect_to_snowflake(session_id, hostname, username, password, passcode):
             f"""Error connecting to Snowflake. This usually means that the snowflake account is invalid.
             Please verify the snowflake account and try again.\n\nOriginal Error: \n\n{e.orig}"""
         )
+        _render_snowflake_fallback_notice()
+        _notify_slack_of_connection_error(session_id, "InterfaceError", hostname, username, e)
         logging.warning(
             f"{session_id}: Error connecting to Snowflake. Account: {hostname}, Username: {username}: {e}"
         )
@@ -565,6 +612,8 @@ def _connect_to_snowflake(session_id, hostname, username, password, passcode):
         st.error(
             f"Error connecting to Snowflake.\n\nOriginal Error:\n\n{e}\n\nStacktrace:\n\n{traceback.format_exc()}"
         )
+        _render_snowflake_fallback_notice()
+        _notify_slack_of_connection_error(session_id, type(e).__name__, hostname, username, e)
         logging.warning(
             f"{session_id}: Error connecting to Snowflake. Account name: {hostname}\n Original Error: {e}\nStacktrace:\n{traceback.format_exc()}"
         )
