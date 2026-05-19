@@ -189,7 +189,9 @@ def generate_set_env_sh(values: dict) -> str:
     return (
         "#!/usr/bin/env bash\n"
         "# Source this file before running dbt:\n"
-        "#   source set-env.sh\n"
+        "#   . set-env.sh\n"
+        "#   or . ../set-env.sh if you run it from the airbnb/ folder.\n"
+        "# !! Do this every time you open a new terminal, as env vars are not persisted !!\n"
         "\n"
         f'export SNOWFLAKE_ACCOUNT="{values["account"]}"\n'
         f'export DBT_USER="{values["user"]}"\n'
@@ -215,6 +217,8 @@ def generate_set_env_ps1(values: dict) -> str:
     return (
         "# Dot-source this file before running dbt:\n"
         "#   . .\\set-env.ps1\n"
+        "# or . ..\\set-env.ps1 if you're running the script from airbnb/ folder\n"
+        "# !! Do this every time you open a new PowerShell terminal, as env vars are not persisted !!\n"
         "# First-time only (one-shot per machine):\n"
         "#   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned\n"
         "\n"
@@ -774,7 +778,7 @@ def _render_env_scripts_standalone():
                     mime="text/plain",
                     key="btn_download_set_env_ps1",
                 )
-            st.success("Environment-variable setter scripts generated successfully!")
+            st.success("Environment-variable-setter scripts generated successfully!")
         except ValueError as e:
             st.error(f"Could not parse profiles.yml: {e}")
     st.markdown(
