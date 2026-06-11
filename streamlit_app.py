@@ -6,7 +6,7 @@ import traceback
 from collections import OrderedDict
 from contextlib import contextmanager
 from logging import getLogger
-from urllib.parse import quote_plus
+from urllib.parse import quote
 
 import requests
 import streamlit as st
@@ -263,11 +263,16 @@ snowflake://preset@{snowflake_account}/AIRBNB?role=REPORTER&warehouse=COMPUTE_WH
 
 @contextmanager
 def get_snowflake_connection(account, username, password, passcode=None):
-    # URL encode the username and password to handle special characters
-    encoded_username = quote_plus(username)
-    encoded_password = quote_plus(password)
+    # URL encode the credentials to handle special characters. Use quote() with
+    # safe="" (not quote_plus): quote_plus encodes spaces as "+", which SQLAlchemy's
+    # URL parser does NOT decode back to a space in the user:pass@host portion, so a
+    # password with a space would reach Snowflake as a literal "+". quote(safe="")
+    # percent-encodes everything (e.g. space -> %20), which round-trips correctly.
+    encoded_username = quote(username, safe="")
+    encoded_password = quote(password, safe="")
+    encoded_account = quote(account, safe="")
 
-    connection_string = f"snowflake://{encoded_username}:{encoded_password}@{account}/AIRBNB/DEV?warehouse=COMPUTE_WH&role=ACCOUNTADMIN&account_identifier={account}"
+    connection_string = f"snowflake://{encoded_username}:{encoded_password}@{encoded_account}/AIRBNB/DEV?warehouse=COMPUTE_WH&role=ACCOUNTADMIN&account_identifier={encoded_account}"
     print(connection_string)
 
     # Add passcode to connect_args if provided (for TOTP-based MFA)
@@ -289,9 +294,11 @@ def get_snowflake_connection(account, username, password, passcode=None):
 def get_dbt_connection(account, login_name, role, private_key_pem):
     """Connect to Snowflake using dbt user with private key authentication."""
 
-    # URL encode the account to handle special characters
-    encoded_login_name = quote_plus(login_name)
-    encoded_account = quote_plus(account)
+    # URL encode the login name and account to handle special characters. Use
+    # quote(safe="") rather than quote_plus so spaces become %20 (which round-trips)
+    # instead of "+" (which SQLAlchemy leaves literal in the user@host portion).
+    encoded_login_name = quote(login_name, safe="")
+    encoded_account = quote(account, safe="")
 
     # Load the private key from PEM format
     private_key = serialization.load_pem_private_key(

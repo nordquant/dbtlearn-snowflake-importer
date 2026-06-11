@@ -1,9 +1,11 @@
 import base64
+from urllib.parse import quote
 
 import pytest
 from core.keys import generate_keys
 from core.snowflake import extract_snowflake_account, is_valid_snowflake_account
 from cryptography.hazmat.primitives import serialization
+from sqlalchemy.engine import make_url
 from streamlit_app import get_dbt_connection
 
 
@@ -157,6 +159,38 @@ class TestIsValidSnowflakeAccount:
         assert extracted_account == url
         # This should be considered invalid input that triggers a warning
         assert is_valid_snowflake_account(extracted_account) is False
+
+
+class TestCredentialEncoding:
+    """Credentials with special characters must round-trip through the connection URL.
+
+    Regression test for passwords containing a space (or any reserved character)
+    failing to authenticate: quote_plus encodes a space as "+", which SQLAlchemy's
+    URL parser leaves literal in the user:pass@host portion. quote(safe="") encodes
+    it as %20, which round-trips correctly.
+    """
+
+    @pytest.mark.parametrize(
+        "secret",
+        [
+            "Redwash220is cool",  # the reported repro (space)
+            "p@ss/w:rd?#&+",  # reserved chars
+            "ünïcödé pä$$",  # unicode + space
+            "plain123",  # control: no special chars
+        ],
+    )
+    def test_password_round_trips_through_url(self, secret):
+        url = f"snowflake://user:{quote(secret, safe='')}@acct/db"
+        assert make_url(url).password == secret
+
+    def test_username_round_trips_through_url(self):
+        username = "weird user@name"
+        url = f"snowflake://{quote(username, safe='')}:pw@acct/db"
+        assert make_url(url).username == username
+
+    def test_quote_plus_space_bug_is_avoided(self):
+        # quote_plus would have produced '+' here; quote must produce %20
+        assert quote("a b", safe="") == "a%20b"
 
 
 class TestPrivateKeyDecryption:
