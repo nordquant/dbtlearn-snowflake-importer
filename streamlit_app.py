@@ -509,8 +509,13 @@ def render_credentials_form(key_prefix=""):
     )
 
     st.warning(
-        "Snowflake has been rolling out an update gradually which enforces **Multi Factor Authentication (MFA)**. If you have been enrolled to MFA, a push notification will be sent to your DUO app after you click _Start Setup_. If this happens, please approve the request and the setup will continue automatically.\n\n"
-        "**If you use TOTP-based MFA** (Google/Microsoft Authenticator, or Duo TOTP), check the box below and enter your 6-digit code."
+        "Snowflake has been rolling out an update gradually which enforces **Multi Factor Authentication (MFA)**. "
+        "Under the new rules, **Duo Push (the \"approve on your phone\" pop-up) no longer works** for tools that connect "
+        "automatically like this one — Snowflake now only accepts a **TOTP code** (a 6-digit code from an authenticator app).\n\n"
+        "**If your account requires MFA, you have two options:**\n\n"
+        "1. **Run the SQL manually:** copy the commands from the courseware into the Snowflake UI yourself (follow the behind-the-scenes video).\n"
+        "2. **Use TOTP:** enroll an authenticator app in Snowflake (Snowsight → your profile → Multi-factor authentication → "
+        "Google/Microsoft Authenticator or Duo TOTP), then check the box below and enter your current 6-digit code."
     )
 
     use_totp = st.checkbox(
@@ -598,12 +603,40 @@ def _connect_to_snowflake(session_id, hostname, username, password, passcode):
         error_str = str(e.orig) if hasattr(e, 'orig') else str(e)
 
         # Check if this is a TOTP MFA error
-        if "TOTP is required" in error_str or "MFA with TOTP" in error_str:
+        lowered_error = error_str.lower()
+        is_totp_required = (
+            "TOTP is required" in error_str or "MFA with TOTP" in error_str
+        )
+        # Newer Snowflake MFA enforcement: the user is enrolled in an MFA method
+        # (e.g. Duo Push, SMS, passkey) that drivers can't use. Message reads:
+        # "MFA authentication is required, but none of your current MFA methods are
+        #  supported for programmatic authentication."
+        is_unsupported_mfa = (
+            "mfa" in lowered_error and "programmatic" in lowered_error
+        )
+
+        if is_totp_required:
             st.error(
                 "**Your Snowflake account requires TOTP-based MFA.**\n\n"
                 "Please check the **'I use TOTP-based MFA'** checkbox above and enter "
                 "the 6-digit code from your authenticator app (Google Authenticator, "
                 "Microsoft Authenticator, or Duo TOTP).\n\n"
+                f"Original Error:\n\n{e.orig}"
+            )
+        elif is_unsupported_mfa:
+            st.error(
+                "**Your Snowflake account has MFA enabled, but your current MFA "
+                "method can't be used by this setup tool.**\n\n"
+                "Snowflake only allows a **TOTP authenticator app** (a 6-digit code) "
+                "for programmatic connections like this one. Methods such as **Duo "
+                "Push**, SMS, or passkeys are not supported here.\n\n"
+                "**To fix this:**\n\n"
+                "1. In Snowflake (Snowsight), go to your **profile → Multi-factor "
+                "authentication** and enroll an authenticator app (Google "
+                "Authenticator, Microsoft Authenticator, or Duo TOTP).\n"
+                "2. Come back here, check the **'I use TOTP-based MFA'** checkbox "
+                "above, enter the current 6-digit code, and press **Start Setup** "
+                "again.\n\n"
                 f"Original Error:\n\n{e.orig}"
             )
         else:
