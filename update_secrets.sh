@@ -1,11 +1,7 @@
-#!/bin/bash
 # Push Snowflake credentials from .env to GitHub secrets
 # Requires: gh CLI authenticated with repo access
 
 set -e
-
-# import GitHub Token
-onepass
 
 # Check if gh is installed
 if ! command -v gh &> /dev/null; then
@@ -50,5 +46,10 @@ echo "  SNOWFLAKE_USERNAME"
 
 gh secret set SNOWFLAKE_PASSWORD --body "$SNOWFLAKE_PASSWORD"
 echo "  SNOWFLAKE_PASSWORD"
+
+if [ -n "$TAILSCALE_AUTHKEY" ]; then
+    gh secret set TAILSCALE_AUTHKEY --body "$TAILSCALE_AUTHKEY"
+    echo "  TAILSCALE_AUTHKEY"
+fi
 
 echo "Done! Secrets updated successfully."
