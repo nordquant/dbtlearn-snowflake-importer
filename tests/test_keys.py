@@ -136,14 +136,19 @@ class TestGenerateKeys:
         # Public keys should also be different (different key pairs)
         assert keypair1.public_key != keypair2.public_key
 
-    def test_generate_keys_same_passphrase_cached(self):
-        """Test that same passphrase returns cached result."""
+    def test_generate_keys_same_passphrase_is_not_reused(self):
+        """Same passphrase must still produce a fresh keypair, never a cached one.
+
+        Guards the cross-tenant leak: if this function is ever memoized on its
+        arguments again (it is always called with the constant "q"), every
+        student sharing the container gets the same private key.
+        """
         keypair1 = generate_keys("same_pass")
         keypair2 = generate_keys("same_pass")
 
-        # Should have same content due to caching (may not be same instance)
-        assert keypair1.private_key == keypair2.private_key
-        assert keypair1.public_key == keypair2.public_key
+        assert keypair1.private_key != keypair2.private_key
+        assert keypair1.public_key != keypair2.public_key
+        # The passphrase is the input, so that one is naturally identical.
         assert keypair1.passphrase == keypair2.passphrase
 
     def test_generate_keys_private_key_encrypted(self):
@@ -250,7 +255,7 @@ class TestGenerateKeys:
             assert keypair.passphrase == passphrase
 
     def test_generate_keys_multiple_calls_different_results(self):
-        """Test that multiple calls with same passphrase return same result due to caching."""
+        """Every call produces distinct key material, however often it's called."""
         passphrase = "caching_test"
 
         # Generate multiple times
@@ -258,7 +263,8 @@ class TestGenerateKeys:
         keypair2 = generate_keys(passphrase)
         keypair3 = generate_keys(passphrase)
 
-        # All should have same content due to caching (may not be same instance)
-        assert keypair1.private_key == keypair2.private_key == keypair3.private_key
-        assert keypair1.public_key == keypair2.public_key == keypair3.public_key
+        private_keys = {keypair1.private_key, keypair2.private_key, keypair3.private_key}
+        public_keys = {keypair1.public_key, keypair2.public_key, keypair3.public_key}
+        assert len(private_keys) == 3
+        assert len(public_keys) == 3
         assert keypair1.passphrase == keypair2.passphrase == keypair3.passphrase

@@ -121,6 +121,24 @@ class TestStandardSetupSteps:
         all_markdown = " ".join([m.value for m in at.markdown])
         assert "Step 1: Snowflake Setup" in all_markdown
 
+    def test_two_sessions_get_different_keypairs(self):
+        """Two students on the same container must never share a private key.
+
+        The keypair goes into each student's profiles.yml and its public half is
+        registered on their own Snowflake account, so a shared key would let any
+        student authenticate as `dbt` in any other student's account.
+        """
+        sessions = []
+        for _ in range(2):
+            at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+            at.run()
+            at.button(key="btn_start_setup").click().run()
+            sessions.append(at.session_state.keypair)
+
+        first, second = sessions
+        assert first.private_key != second.private_key
+        assert first.public_key != second.public_key
+
     def test_step_1_is_snowflake_setup_not_keypair(self):
         """Step 1 is now Snowflake setup (credentials form), not keypair generation."""
         at = AppTest.from_file("streamlit_app.py", default_timeout=30)

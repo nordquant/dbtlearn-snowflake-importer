@@ -272,8 +272,8 @@ def get_snowflake_connection(account, username, password, passcode=None):
     encoded_password = quote(password, safe="")
     encoded_account = quote(account, safe="")
 
+    # Never log this: it carries the student's admin password.
     connection_string = f"snowflake://{encoded_username}:{encoded_password}@{encoded_account}/AIRBNB/DEV?warehouse=COMPUTE_WH&role=ACCOUNTADMIN&account_identifier={encoded_account}"
-    print(connection_string)
 
     # Add passcode to connect_args if provided (for TOTP-based MFA)
     connect_args = {}
@@ -874,9 +874,13 @@ def _verify_user_connections(session_id, conn_builder):
                     user_connection.execute(text(f"USE SCHEMA {schema}"))
 
                     if login_name == "dbt":
-                        # Query RAW_LISTINGS table using dbt user
+                        # Query RAW_LISTINGS table using dbt user. LIMIT 1 keeps
+                        # this constant-memory: an unbounded SELECT * makes the
+                        # Snowflake connector materialize the first result chunk
+                        # and prefetch more on background threads, all to read
+                        # the single row we need to prove the grants work.
                         result = user_connection.execute(
-                            text("SELECT * FROM RAW.RAW_LISTINGS")
+                            text("SELECT * FROM RAW.RAW_LISTINGS LIMIT 1")
                         )
                         result.fetchone()
 
