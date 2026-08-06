@@ -27,7 +27,8 @@ jobs:
   integration-test:
     name: Run Integration Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Unit suite ~2min, test_full_flow ~4min, acceptance suite ~7min, plus setup.
+    timeout-minutes: 25
 
     steps:
       - name: Checkout code
@@ -44,6 +45,15 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Run unit tests
+        # No credentials needed. Fails fast on things the Snowflake tests would
+        # only surface after several minutes of provisioning.
+        run: |
+          uv run pytest tests/ -v --timeout=300 \
+            --ignore=tests/test_full_flow.py \
+            --ignore=tests/test_acceptance_flows.py \
+            --ignore=tests/test_production_e2e.py
+
       - name: Check for [testceu] tag
         id: check_ceu
         run: |
@@ -53,16 +63,22 @@ jobs:
             echo "run_ceu=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Run integration tests
+      - name: Run integration and acceptance tests
+        # Both suites provision the same Snowflake account, so they run in one
+        # invocation: pytest works through the files in the order given, and each
+        # provisioning test verifies its own state before returning. The
+        # snowflake-tests concurrency group keeps other workflows off the account.
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
           if [ "${{ steps.check_ceu.outputs.run_ceu }}" = "true" ]; then
-            uv run pytest tests/test_full_flow.py -v -s --timeout=600
+            uv run pytest tests/test_full_flow.py tests/test_acceptance_flows.py \
+              -v -s --timeout=900
           else
-            uv run pytest tests/test_full_flow.py -v -s --timeout=600 -m "not ceu"
+            uv run pytest tests/test_full_flow.py tests/test_acceptance_flows.py \
+              -v -s --timeout=900 -m "not ceu"
           fi
 
   build-test-push:
