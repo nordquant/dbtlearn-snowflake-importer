@@ -101,6 +101,72 @@ class TestExtractSnowflakeAccount:
         assert extract_snowflake_account("invalid..pattern..") == "invalid..pattern.."
 
 
+class TestExtractFromSnowsightUrl:
+    """Snowsight serves every account from app.snowflake.com.
+
+    The account is in the path, not the hostname, so these URLs must not be
+    reduced to their host the way snowflakecomputing.com URLs are.
+    """
+
+    def test_workspace_url_resolves_to_org_dash_account(self):
+        assert (
+            extract_snowflake_account(
+                "https://app.snowflake.com/qfxfhpj/nub20832/#/workspaces/ws/"
+                "USER%24/PUBLIC/DEFAULT%24/Untitled.sql"
+            )
+            == "qfxfhpj-nub20832"
+        )
+
+    def test_bare_account_url(self):
+        assert (
+            extract_snowflake_account("https://app.snowflake.com/qfxfhpj/nub20832")
+            == "qfxfhpj-nub20832"
+        )
+
+    def test_trailing_slash(self):
+        assert (
+            extract_snowflake_account("https://app.snowflake.com/qfxfhpj/nub20832/")
+            == "qfxfhpj-nub20832"
+        )
+
+    def test_without_protocol(self):
+        assert (
+            extract_snowflake_account("app.snowflake.com/qfxfhpj/nub20832/#/data")
+            == "qfxfhpj-nub20832"
+        )
+
+    def test_query_string_is_ignored(self):
+        assert (
+            extract_snowflake_account(
+                "https://app.snowflake.com/qfxfhpj/nub20832/?utm_source=email"
+            )
+            == "qfxfhpj-nub20832"
+        )
+
+    def test_legacy_region_url_resolves_to_locator_dot_region(self):
+        assert (
+            extract_snowflake_account("https://app.snowflake.com/us-east-1/xy12345/#/data")
+            == "xy12345.us-east-1"
+        )
+
+    def test_legacy_region_url_on_gcp(self):
+        assert (
+            extract_snowflake_account(
+                "https://app.snowflake.com/us-central1.gcp/ab99999/#/data"
+            )
+            == "ab99999.us-central1.gcp"
+        )
+
+    def test_host_without_a_path_is_not_an_account(self):
+        """It must not pass validation — it's the same host for every customer."""
+        for url in (
+            "https://app.snowflake.com",
+            "https://app.snowflake.com/",
+            "https://app.snowflake.com/qfxfhpj",
+        ):
+            assert not is_valid_snowflake_account(extract_snowflake_account(url)), url
+
+
 class TestIsValidSnowflakeAccount:
     def test_valid_account_with_hyphen(self):
         assert is_valid_snowflake_account("frgcsyo-ie17820") is True

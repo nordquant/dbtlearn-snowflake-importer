@@ -388,6 +388,71 @@ def get_sql_commands(md, public_key=None):
     }
 
 
+def get_raw_sql_blocks(md, public_key=None):
+    """Extract named SQL blocks as raw text, preserving comments and blank lines.
+
+    Unlike get_sql_commands(), which strips comments and splits the block into
+    individual statements for execution, this keeps each block exactly as written
+    so students can paste it straight into a Snowflake worksheet.
+    """
+    blocks = OrderedDict()
+    current_section = None
+    in_named_sql = False
+    placeholder = "<<Add Your Public Key File's content here>>"
+
+    for line in md.split("\n"):
+        if in_named_sql:
+            if line.startswith("```"):
+                in_named_sql = False
+                continue
+            if public_key and placeholder in line:
+                line = line.replace(placeholder, public_key)
+            blocks[current_section] = blocks.get(current_section, "") + line + "\n"
+        elif line.startswith("```sql {#"):
+            in_named_sql = True
+            current_section = line.split("{#")[1].split("}")[0]
+
+    return OrderedDict((k, v.strip("\n")) for k, v in blocks.items())
+
+
+def load_manual_sql_blocks(public_key):
+    """Load every SQL block the automated setup would run, as pasteable raw SQL."""
+    blocks = OrderedDict()
+
+    with open(os.path.join(CURRENT_DIR, "course-resources.md"), "r") as file:
+        blocks.update(get_raw_sql_blocks(file.read().rstrip(), public_key))
+
+    capstone_path = os.path.join(CURRENT_DIR, "capstone-resources.md")
+    if os.path.exists(capstone_path):
+        with open(capstone_path, "r") as file:
+            blocks.update(get_raw_sql_blocks(file.read().rstrip(), public_key))
+    else:
+        logging.error(f"Capstone file not found at {capstone_path}")
+
+    return blocks
+
+
+def build_manual_sql_script(public_key):
+    """Join every setup block into one script students can copy in a single go.
+
+    Section headers become SQL comments so the script stays valid when pasted
+    into a Snowflake worksheet and executed as a whole.
+    """
+    blocks = load_manual_sql_blocks(public_key)
+
+    parts = []
+    for index, (section, sql) in enumerate(blocks.items(), start=1):
+        title = sql_sections.get(section, section)
+        parts.append(
+            f"-- ============================================================\n"
+            f"-- Step {index}: {title}\n"
+            f"-- ============================================================\n"
+            f"{sql}"
+        )
+
+    return "\n\n".join(parts)
+
+
 hello_msg_default = """
 # dbt (Data Build Tool) Bootcamp
 ## Snowflake and Profile Setup Helper
@@ -459,6 +524,124 @@ def get_build_info() -> str:
     return f"commit: {commit_link} | container: {container_id} | started: {APP_START_TIME} UTC"
 
 
+# Shown in the account field until the student types their own identifier.
+ACCOUNT_PLACEHOLDER = "xxxxxx-xxxxxxxx"
+
+ACCOUNT_INPUT_LABEL = (
+    "Snowflake account — e.g. `frgcsyo-ie17820` or `frgcsyo-ie17820.aws`, from your "
+    "Snowflake registration email. **Not your username.** You can also paste the full URL:"
+)
+
+
+ACCOUNT_CHECK_TIMEOUT_SECONDS = 10
+
+
+def check_snowflake_account_exists(account):
+    """Ask Snowflake whether an account identifier belongs to a real account.
+
+    Snowflake redirects `https://<account>.snowflakecomputing.com/` to the login
+    console for accounts that exist and serves a 404 for ones that don't, so this
+    needs no credentials. DNS is not usable for this — Snowflake resolves
+    nonexistent accounts too.
+
+    Returns (exists, detail). ``exists`` is None when we couldn't tell (network
+    error, unexpected status); that must never be reported as a bad account.
+    """
+    url = f"https://{account}.snowflakecomputing.com/"
+    try:
+        response = requests.get(
+            url, timeout=ACCOUNT_CHECK_TIMEOUT_SECONDS, allow_redirects=False
+        )
+    except requests.RequestException as e:
+        logging.warning(f"Account check failed for {account}: {e}")
+        return None, str(e)
+
+    if response.status_code == 404:
+        return False, f"HTTP 404 from {url}"
+    if response.status_code < 400:
+        return True, f"HTTP {response.status_code} from {url}"
+    return None, f"HTTP {response.status_code} from {url}"
+
+
+def _render_account_check(key, account, is_valid):
+    """Render the "check account identifier" button and its last result.
+
+    The result is remembered alongside the account it was produced for, so it
+    disappears as soon as the student edits the field.
+    """
+    result_key = f"{key}_check_result"
+
+    # Deliberately never disabled: clicking the button is what commits a freshly
+    # typed value, so a disabled button would trap students who type and click
+    # without pressing Enter first.
+    if st.button(
+        "Check account identifier",
+        key=f"{key}_check_button",
+        help="Checks that this account exists. No password is sent.",
+    ):
+        if not is_valid:
+            st.session_state.pop(result_key, None)
+            st.warning("Enter your Snowflake account first.")
+            return
+
+        with st.spinner("Checking..."):
+            exists, detail = check_snowflake_account_exists(account)
+        st.session_state[result_key] = (account, exists, detail)
+
+    remembered = st.session_state.get(result_key)
+    if not remembered or remembered[0] != account:
+        return
+
+    _, exists, _detail = remembered
+    if exists is True:
+        st.success(f"`{account}` is a valid Snowflake account.")
+    elif exists is False:
+        st.error(
+            f"Snowflake doesn't know an account called `{account}`. "
+            "Check your registration email — it may need a region suffix like `.aws`."
+        )
+    else:
+        st.warning("Couldn't reach Snowflake to check. You can still continue.")
+
+
+def render_account_input(key):
+    """Render the Snowflake account field with URL extraction and validation.
+
+    Shared by the credentials form and the manual-SQL page so both accept the same
+    inputs (bare identifier, `.aws` suffix, or a pasted registration URL).
+
+    Returns (account, is_valid). ``is_valid`` is False while the field still holds
+    the untouched placeholder — which matches the account pattern, so callers that
+    require a real account cannot rely on is_valid_snowflake_account() alone.
+    """
+    # Carry the account across screens; fall back to the env var (local dev / tests).
+    default_account = st.session_state.get(
+        "snowflake_account"
+    ) or os.environ.get("SNOWFLAKE_ACCOUNT", ACCOUNT_PLACEHOLDER)
+
+    account_raw = st.text_input(ACCOUNT_INPUT_LABEL, default_account, key=key)
+    account = extract_snowflake_account(account_raw)
+
+    is_entered = account_raw.strip() not in ("", ACCOUNT_PLACEHOLDER)
+    is_valid = is_entered and is_valid_snowflake_account(account)
+
+    # Store the account in session state for later use. Kept unconditional so the
+    # manual-SQL page inherits whatever was typed on the credentials form.
+    st.session_state.snowflake_account = account
+
+    if is_entered and not is_valid:
+        st.warning(
+            "This doesn't look like a valid Snowflake account format. Please check your account identifier."
+        )
+    elif is_valid and account != account_raw:
+        # Show the extracted account identifier if it's different from the input
+        st.info(f"Using account identifier: `{account}`")
+
+    _render_account_check(key, account, is_valid)
+
+    return account, is_valid
+
+
 def render_credentials_form(key_prefix=""):
     """Render Snowflake credentials form. Returns (hostname, username, password, passcode).
 
@@ -468,34 +651,14 @@ def render_credentials_form(key_prefix=""):
     registry.register("snowflake", "snowflake.sqlalchemy", "dialect")
 
     # Check environment for credentials (priority: env vars, then defaults)
-    env_account = os.environ.get("SNOWFLAKE_ACCOUNT", "xxxxxx-xxxxxxxx")
     env_username = os.environ.get("SNOWFLAKE_USERNAME", "admin")
     env_password = os.environ.get("SNOWFLAKE_PASSWORD", "")
 
     st.info(
         "Now let's add your Snowflake Account name and Admin Credentials so we can set up the permissions and the datasets for you."
     )
-    hostname_raw = st.text_input(
-        "Snowflake account (this looks like as `frgcsyo-ie17820` or `frgcsyo-ie17820.aws`, check your snowlake registration email).\n\n_**This is not your Snowflake username**, but the first part of the snowflake url you received in your snowflake registration email_. You can also paste the full url from the registration email:",
-        env_account,
-        key=f"{key_prefix}input_snowflake_account",
-    )
-    hostname = extract_snowflake_account(hostname_raw)
+    hostname, _ = render_account_input(f"{key_prefix}input_snowflake_account")
 
-    # Check if the account format is valid
-    account_is_valid = is_valid_snowflake_account(hostname)
-
-    # Store the account in session state for later use
-    st.session_state.snowflake_account = hostname
-
-    if hostname_raw.strip() != "xxxxxx-xxxxxxxx" and not account_is_valid:
-        st.warning(
-            "This doesn't look like a valid Snowflake account format. Please check your account identifier."
-        )
-    else:
-        # Show the extracted account identifier if it's different from the input
-        if hostname != hostname_raw and hostname_raw.strip() != "xxxxxx-xxxxxxxx":
-            st.info(f"Using account identifier: `{hostname}`")
     username = st.text_input(
         "Snowflake username (change this is you didn't set it to `admin` at registration):",
         env_username,
@@ -509,29 +672,21 @@ def render_credentials_form(key_prefix=""):
     )
 
     st.warning(
-        "Snowflake has been rolling out an update gradually which enforces **Multi Factor Authentication (MFA)**. "
-        "Under the new rules, **Duo Push (the \"approve on your phone\" pop-up) no longer works** for tools that connect "
-        "automatically like this one — Snowflake now only accepts a **TOTP code** (a 6-digit code from an authenticator app).\n\n"
-        "**If your account requires MFA, you have two options:**\n\n"
-        "1. **Run the SQL manually:** copy the commands from the courseware into the Snowflake UI yourself (follow the behind-the-scenes video).\n"
-        "2. **Use TOTP:** enroll an authenticator app in Snowflake (Snowsight → your profile → Multi-factor authentication → "
-        "Google/Microsoft Authenticator or Duo TOTP), then check the box below and enter your current 6-digit code."
+        "**Multi Factor Authentication (MFA)**\n\n"
+        "* **Duo app:** leave the code empty and approve the notification on your phone.\n"
+        "* **Authenticator app:** enter your current 6-digit code.\n\n"
+        "No MFA yet? Try to leave the MFA box below empty, and it's not working, do to your snowflake and click: your account name (bottom left) → **Account** → "
+        "**Authentication** → **Add authentication method** → **Authenticator** "
+        "(not Passkey)."
     )
 
-    use_totp = st.checkbox(
-        "I use TOTP-based MFA (authenticator app that generates 6-digit codes)",
-        key=f"{key_prefix}checkbox_use_totp",
-        help="Check this if you use an authenticator app like Google Authenticator, Microsoft Authenticator, or Duo TOTP"
+    passcode_input = st.text_input(
+        "6-digit MFA code (leave empty for Duo push or if MFA is not enabled:",
+        max_chars=6,
+        key=f"{key_prefix}input_totp_passcode",
     )
-
-    passcode = None
-    if use_totp:
-        passcode = st.text_input(
-            "Enter your 6-digit TOTP code:",
-            max_chars=6,
-            key=f"{key_prefix}input_totp_passcode",
-            help="Open your authenticator app and enter the current 6-digit code for Snowflake"
-        )
+    # An empty field means "no TOTP" — we must not pass an empty passcode to Snowflake.
+    passcode = passcode_input.strip() or None
 
     return hostname, username, password, passcode
 
@@ -617,26 +772,18 @@ def _connect_to_snowflake(session_id, hostname, username, password, passcode):
 
         if is_totp_required:
             st.error(
-                "**Your Snowflake account requires TOTP-based MFA.**\n\n"
-                "Please check the **'I use TOTP-based MFA'** checkbox above and enter "
-                "the 6-digit code from your authenticator app (Google Authenticator, "
-                "Microsoft Authenticator, or Duo TOTP).\n\n"
+                "**Your Snowflake account needs an MFA code.**\n\n"
+                "Enter your current 6-digit code above and press **Start Setup** again.\n\n"
                 f"Original Error:\n\n{e.orig}"
             )
         elif is_unsupported_mfa:
             st.error(
-                "**Your Snowflake account has MFA enabled, but your current MFA "
-                "method can't be used by this setup tool.**\n\n"
-                "Snowflake only allows a **TOTP authenticator app** (a 6-digit code) "
-                "for programmatic connections like this one. Methods such as **Duo "
-                "Push**, SMS, or passkeys are not supported here.\n\n"
-                "**To fix this:**\n\n"
-                "1. In Snowflake (Snowsight), go to your **profile → Multi-factor "
-                "authentication** and enroll an authenticator app (Google "
-                "Authenticator, Microsoft Authenticator, or Duo TOTP).\n"
-                "2. Come back here, check the **'I use TOTP-based MFA'** checkbox "
-                "above, enter the current 6-digit code, and press **Start Setup** "
-                "again.\n\n"
+                "**Your MFA method can't be used by this tool** — usually a Passkey "
+                "(Touch ID / Face ID), which only works in the Snowflake web UI.\n\n"
+                "In Snowflake: your account name (bottom left) → **Account** → "
+                "**Authentication** → **Add authentication method** → **Authenticator** "
+                "(not Passkey). Then enter the 6-digit code above.\n\n"
+                "Or use **Skip the automated setup** above and run the commands yourself.\n\n"
                 f"Original Error:\n\n{e.orig}"
             )
         else:
@@ -859,6 +1006,139 @@ def _render_env_scripts_standalone():
     )
 
 
+# Step index of the "run the SQL yourself" screen in the standard flow.
+STEP_MANUAL_SQL = 3
+
+# Walkthrough recording. H.264 rather than the source GIF: same silent loop,
+# ~20x smaller. Note it goes through st.video() rather than Streamlit's static
+# file serving — that handler only sets real MIME types for an allow-list of
+# extensions (images, fonts, pdf, json) and serves .mp4 as text/plain, which
+# browsers refuse to play.
+SNOWFLAKE_PASTE_VIDEO = "snowflake-add.mp4"
+
+
+def _ensure_keypair():
+    """Generate the session keypair if we don't have one yet, without any fanfare.
+
+    Almost no student knows or cares what a keypair is — the setup just needs one,
+    so it happens quietly in the background.
+    """
+    if "keypair" not in st.session_state:
+        st.session_state.keypair = generate_keys("q")
+    return st.session_state.keypair
+
+
+def _render_keypair_downloads():
+    """Offer the keypair files behind a deliberately quiet, collapsed expander.
+
+    Only students who came looking for the keys should notice this.
+    """
+    keypair = st.session_state.keypair
+
+    with st.expander("Keys generated"):
+        st.caption("Used automatically during setup. Download only if you want a backup.")
+        st.download_button(
+            label="Download Private Key (rsa_key.p8)",
+            data=keypair.private_key,
+            file_name="rsa_key.p8",
+            mime="text/plain",
+            key="btn_download_private_key",
+        )
+        st.download_button(
+            label="Download Public Key (rsa_key.pub)",
+            data=keypair.public_key,
+            file_name="rsa_key.pub",
+            mime="text/plain",
+            key="btn_download_public_key",
+        )
+
+
+def _render_static_video(filename, caption=None):
+    """Embed a walkthrough video that loops silently, like the GIF it replaced.
+
+    ``muted`` is what makes browsers allow autoplay. Skipped when the file is
+    missing, so a packaging slip degrades to a page without a video rather
+    than a broken one.
+    """
+    path = os.path.join(CURRENT_DIR, "static", filename)
+    if not os.path.exists(path):
+        logging.error(f"Static asset not found: static/{filename}")
+        return
+
+    st.video(path, loop=True, autoplay=True, muted=True)
+    if caption:
+        st.caption(caption)
+
+
+def _render_manual_sql_page():
+    """Render the manual-SQL screen: the exact commands the automated setup runs.
+
+    Students who can't get past MFA (e.g. passkey-only accounts) paste these into
+    a Snowflake worksheet themselves, then continue to the download page. The
+    public key baked into the SQL comes from the same session keypair that ends up
+    in profiles.yml, so both must be taken from this same browser session.
+    """
+    st.markdown("### Manual Snowflake Setup")
+
+    if st.button(
+        "Back to the automated setup", type="secondary", key="btn_manual_back"
+    ):
+        st.session_state.step_standard = 1
+        st.rerun()
+
+    # The keypair is normally generated in step 1, but this page can be reached
+    # directly (e.g. after a page reload), so make sure we have one.
+    keypair = _ensure_keypair()
+
+    st.warning(
+        "**Don't close this tab** — open Snowflake in a new tab, or this setup stops working."
+    )
+
+    st.divider()
+
+    st.subheader("1) Add your Snowflake Account")
+    account, account_is_valid = render_account_input("manual_input_snowflake_account")
+
+    st.divider()
+
+    st.subheader("2) Copy this Snowflake Command and Paste / Execute in Snowflake")
+
+    combined_sql = build_manual_sql_script(keypair.public_key)
+    if not combined_sql:
+        st.error(
+            "Could not load the SQL commands. Please contact support or use the "
+            "automated setup."
+        )
+        return
+
+    _render_static_video(
+        SNOWFLAKE_PASTE_VIDEO,
+        caption="Paste into a Snowflake worksheet, select all, press play.",
+    )
+    st.markdown("Copy the whole block (copy button in the top right of the box):")
+    st.code(combined_sql, language="sql")
+
+    st.divider()
+
+    st.subheader("3) Download your dbt config files")
+
+    if st.button(
+        "Commands executed in Snowflake, download dbt config files",
+        type="primary",
+        use_container_width=True,
+        key="btn_manual_done",
+    ):
+        if not account_is_valid:
+            st.error(
+                "Please enter a valid Snowflake account above — it's needed to "
+                "generate your `profiles.yml`."
+            )
+            return
+        st.session_state.snowflake_account = account
+        st.session_state.step_standard = 2
+        st.rerun()
+
+
 def standard_setup(session_id):
     """Standard setup flow: landing -> Snowflake setup (with keypair) -> download config files."""
     is_ceu_mode = st.session_state.course_mode == "ceu"
@@ -889,36 +1169,22 @@ def standard_setup(session_id):
             st.session_state.step_standard = 0
             st.rerun()
 
-        # Generate keypair silently
-        if "keypair" not in st.session_state:
-            with st.status("Generating keypair..."):
-                st.session_state.keypair = generate_keys("q")
-                st.markdown(" Private Key (rsa_key.p8) generated")
-                st.markdown(" Public Key (rsa_key.pub) generated")
-        keypair = st.session_state.keypair
-
-        # Keypair download in expander
-        with st.expander("Advanced: Download keypair files"):
-            st.info(
-                "These keypair files are automatically used during setup. You only need to download them if you want a backup copy."
-            )
-            st.download_button(
-                label="Download Private Key (rsa_key.p8)",
-                data=keypair.private_key,
-                file_name="rsa_key.p8",
-                mime="text/plain",
-                key="btn_download_private_key",
-            )
-            st.download_button(
-                label="Download Public Key (rsa_key.pub)",
-                data=keypair.public_key,
-                file_name="rsa_key.pub",
-                mime="text/plain",
-                key="btn_download_public_key",
-            )
+        _ensure_keypair()
+        _render_keypair_downloads()
 
         # Credentials form
         hostname, username, password, passcode = render_credentials_form(key_prefix="std_")
+
+        st.divider()
+        st.markdown("**Can't get past MFA?** Run the Snowflake commands yourself instead:")
+        if st.button(
+            "Skip the automated setup — show me the SQL commands",
+            type="secondary",
+            key="btn_show_manual_sql",
+        ):
+            st.session_state.step_standard = STEP_MANUAL_SQL
+            st.rerun()
+        st.divider()
 
         if st.button("Start Setup", key="btn_start_snowflake_setup"):
             if len(password) == 0:
@@ -1092,6 +1358,10 @@ def standard_setup(session_id):
         st.success(
             "Once you downloaded both files, you can go back to the course and continue with the setup!"
         )
+
+    # Step 3: Manual SQL (skip the automated setup)
+    elif st.session_state.step_standard == STEP_MANUAL_SQL:
+        _render_manual_sql_page()
 
 
 def capstone_setup(session_id):

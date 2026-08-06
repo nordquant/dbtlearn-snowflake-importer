@@ -2,6 +2,7 @@
 /.claude/
 __pycache__/
 .env
-# Generated at container startup
-/static/
+# Generated at container startup (the rest of /static/ is committed and shipped
+# in the image — that's where Streamlit's static file serving reads from)
+/static/container-info.json
 .DS_Store
