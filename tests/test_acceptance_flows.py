@@ -36,6 +36,8 @@ import pytest
 from sqlalchemy import text
 from streamlit.testing.v1 import AppTest
 
+from tests.conftest import APP_FILE
+
 from streamlit_app import (
     STEP_MANUAL_SQL,
     build_manual_sql_script,
@@ -55,7 +57,7 @@ SNOWFLAKE_SETUP_TIMEOUT = 300
 
 def _start_standard_setup(credentials):
     """Drive a fresh session from the landing page to step 1 with credentials filled."""
-    at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+    at = AppTest.from_file(APP_FILE, default_timeout=30)
     at.run()
     assert not at.exception, f"App failed to start: {at.exception}"
 

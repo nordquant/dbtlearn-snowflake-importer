@@ -1,7 +1,13 @@
 import os
+from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
+
+# Absolute path to the app under test. Streamlit 1.61 resolves a relative
+# AppTest.from_file() path against the file that calls it rather than the
+# working directory, so a bare "streamlit_app.py" would look inside tests/.
+APP_FILE = str(Path(__file__).parent.parent / "streamlit_app.py")
 
 # Load .env only if it exists (local dev)
 # Environment variables from CI/GitHub secrets take priority

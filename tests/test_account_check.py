@@ -8,6 +8,8 @@ import pytest
 import requests
 from streamlit.testing.v1 import AppTest
 
+from tests.conftest import APP_FILE
+
 from streamlit_app import check_snowflake_account_exists
 
 
@@ -82,7 +84,7 @@ class TestAccountCheckUI:
             "get",
             lambda url, **kwargs: _FakeResponse(status),
         )
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
         at.button(key="btn_start_setup").click().run()
         return at

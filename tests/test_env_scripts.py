@@ -3,6 +3,8 @@
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from tests.conftest import APP_FILE
+
 from core.keys import generate_keys
 from streamlit_app import (
     generate_profiles_yml,
@@ -237,7 +239,7 @@ class TestEnvScriptsUI:
 
     def test_env_scripts_tab_renders_in_default(self):
         """Default mode renders the env-scripts heading and an uploader."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
 
         markdown_blobs = " ".join(m.value for m in at.get("markdown"))
@@ -249,7 +251,7 @@ class TestEnvScriptsUI:
 
     def test_env_scripts_tab_absent_in_ceu(self):
         """CEU mode shows no tabs, so no env-scripts heading and no uploader."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.query_params["course"] = "ceu"
         at.run()
 

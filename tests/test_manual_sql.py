@@ -9,6 +9,8 @@ import os
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from tests.conftest import APP_FILE
+
 from streamlit_app import (
     CURRENT_DIR,
     SNOWFLAKE_PASTE_VIDEO,
@@ -121,7 +123,7 @@ class TestManualSqlUI:
         monkeypatch.delenv("SNOWFLAKE_ACCOUNT", raising=False)
 
     def _at_on_manual_page(self):
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
         at.button(key="btn_start_setup").click().run()
         at.button(key="btn_show_manual_sql").click().run()
@@ -129,7 +131,7 @@ class TestManualSqlUI:
 
     def test_totp_field_is_shown_by_default_and_starts_empty(self):
         """No checkbox to tick — the field is always there, empty means "don't use it"."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
         at.button(key="btn_start_setup").click().run()
 
@@ -192,7 +194,7 @@ class TestManualSqlUI:
 
     def test_account_from_step_1_is_carried_over(self):
         """Whatever was typed on the credentials form prefills the manual page."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
         at.button(key="btn_start_setup").click().run()
 
@@ -209,7 +211,7 @@ class TestManualSqlUI:
         assert at.session_state.step_standard == 2
 
     def test_url_pasted_in_step_1_is_carried_over_extracted(self):
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
         at.button(key="btn_start_setup").click().run()
 
@@ -273,7 +275,7 @@ class TestKeypairIsUnobtrusive:
     """Students shouldn't have to think about keypairs at all."""
 
     def _at_on_step_1(self):
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
         at.button(key="btn_start_setup").click().run()
         return at

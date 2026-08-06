@@ -3,6 +3,8 @@
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from tests.conftest import APP_FILE
+
 from core.keys import generate_keys
 from streamlit_app import (
     generate_preset_instructions,
@@ -184,7 +186,7 @@ class TestPresetRecoveryUI:
 
     def test_recovery_expander_on_default_landing(self):
         """Default mode landing page has the upload_profiles_yml file uploader."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
 
         # File uploader widget should exist
@@ -193,7 +195,7 @@ class TestPresetRecoveryUI:
 
     def test_no_recovery_in_ceu_mode(self):
         """CEU mode has no preset recovery tab (no file uploader)."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.query_params["course"] = "ceu"
         at.run()
 
@@ -202,7 +204,7 @@ class TestPresetRecoveryUI:
 
     def test_recovery_expander_on_capstone_landing(self):
         """Capstone tab has the upload_profiles_yml file uploader."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
 
         # With tabs, capstone content is rendered — file uploader should be present

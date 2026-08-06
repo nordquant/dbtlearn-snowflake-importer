@@ -1,13 +1,15 @@
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from tests.conftest import APP_FILE
+
 
 class TestCourseModeDetection:
     """Test course mode detection from query parameters."""
 
     def test_default_mode_welcome_message(self):
         """Default mode shows standard dbt Bootcamp welcome with AIRSTATS mention."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
 
         # Check welcome message contains dbt Bootcamp, not CEU
@@ -19,7 +21,7 @@ class TestCourseModeDetection:
 
     def test_ceu_mode_welcome_message(self):
         """CEU mode shows CEU Modern Data Platforms branding."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.query_params["course"] = "ceu"
         at.run()
 
@@ -30,20 +32,20 @@ class TestCourseModeDetection:
 
     def test_default_mode_session_state(self):
         """Default mode sets course_mode to 'default'."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
         assert at.session_state.course_mode == "default"
 
     def test_ceu_mode_session_state(self):
         """CEU query param sets course_mode to 'ceu'."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.query_params["course"] = "ceu"
         at.run()
         assert at.session_state.course_mode == "ceu"
 
     def test_ceu_mode_persists_through_steps(self):
         """CEU mode persists when navigating through steps."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.query_params["course"] = "ceu"
         at.run()
 
@@ -57,7 +59,7 @@ class TestModeSelection:
 
     def test_tabs_render_in_default_mode(self):
         """Default mode renders tabs for all setup options."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
 
         # Both standard and capstone buttons should be accessible (tabs render all content)
@@ -66,7 +68,7 @@ class TestModeSelection:
 
     def test_no_tabs_in_ceu_mode(self):
         """CEU mode has no capstone tab — only standard setup."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.query_params["course"] = "ceu"
         at.run()
 
@@ -82,7 +84,7 @@ class TestModeSelection:
 
     def test_tabs_have_independent_state(self):
         """Standard and capstone tabs maintain independent step state."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
 
         # Start standard setup
@@ -94,7 +96,7 @@ class TestModeSelection:
 
     def test_capstone_tab_landing_page(self):
         """Capstone tab shows warning about pre-Feb-2026 students."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
 
         # With tabs, capstone content is rendered directly
@@ -107,7 +109,7 @@ class TestStandardSetupSteps:
 
     def test_step_1_has_keypair_expander(self):
         """Step 1 contains keypair generation in an expander, not a separate step."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
 
         # Go to step 1
@@ -130,7 +132,7 @@ class TestStandardSetupSteps:
         """
         sessions = []
         for _ in range(2):
-            at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+            at = AppTest.from_file(APP_FILE, default_timeout=30)
             at.run()
             at.button(key="btn_start_setup").click().run()
             sessions.append(at.session_state.keypair)
@@ -141,7 +143,7 @@ class TestStandardSetupSteps:
 
     def test_step_1_is_snowflake_setup_not_keypair(self):
         """Step 1 is now Snowflake setup (credentials form), not keypair generation."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
 
         # Go to step 1
@@ -155,7 +157,7 @@ class TestStandardSetupSteps:
 
     def test_no_separate_keypair_step(self):
         """There should be no separate keypair step (no btn_continue_to_snowflake)."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
 
         # Go to step 1
@@ -221,7 +223,7 @@ class TestCeuModeFullFlow:
     @pytest.mark.ceu
     def test_ceu_complete_setup_flow(self, snowflake_credentials):
         """Test CEU mode creates AIRSTATS database alongside AIRBNB."""
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.query_params["course"] = "ceu"
         at.run()
 

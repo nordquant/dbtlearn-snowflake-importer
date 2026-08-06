@@ -1,6 +1,8 @@
 import pytest
 from streamlit.testing.v1 import AppTest
 
+from tests.conftest import APP_FILE
+
 # 5 minutes for Snowflake setup (data import can be slow)
 SNOWFLAKE_SETUP_TIMEOUT = 300
 
@@ -17,7 +19,7 @@ class TestFullSetupFlow:
 
         Verifies: AIRBNB tables (3), AIRSTATS tables (3), dbt/preset user connections.
         """
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
 
         # Verify app started without errors
@@ -71,7 +73,7 @@ class TestFullSetupFlow:
 
         Verifies: AIRSTATS tables (3), success message.
         """
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
 
         # Verify app started without errors
@@ -121,7 +123,7 @@ class TestFullSetupFlow:
         2. Snowflake setup (keypair + credentials + SQL including AIRSTATS)
         3. Verify we reach step 2 (downloads)
         """
-        at = AppTest.from_file("streamlit_app.py", default_timeout=30)
+        at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.query_params["course"] = "ceu"
         at.run()
 
