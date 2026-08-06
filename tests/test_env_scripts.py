@@ -1,4 +1,4 @@
-"""Tests for the 'Download env scripts' tab and its helpers."""
+"""Tests for the 'Download env-var scripts' tab and its helpers."""
 
 import pytest
 from streamlit.testing.v1 import AppTest
@@ -241,7 +241,7 @@ class TestEnvScriptsUI:
         at.run()
 
         markdown_blobs = " ".join(m.value for m in at.get("markdown"))
-        assert "Download env scripts" in markdown_blobs, (
+        assert "Download env-var scripts" in markdown_blobs, (
             "Expected env-scripts tab heading in default-mode markdown"
         )
         # Default mode now has at least 2 uploaders (preset recovery + env scripts).
@@ -254,5 +254,5 @@ class TestEnvScriptsUI:
         at.run()
 
         markdown_blobs = " ".join(m.value for m in at.get("markdown"))
-        assert "Download env scripts" not in markdown_blobs
+        assert "Download env-var scripts" not in markdown_blobs
         assert len(at.get("file_uploader")) == 0
