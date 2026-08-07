@@ -1179,17 +1179,6 @@ def standard_setup(session_id):
         # Credentials form
         hostname, username, password, passcode = render_credentials_form(key_prefix="std_")
 
-        st.divider()
-        st.markdown("**Can't get past MFA?** Run the Snowflake commands yourself instead:")
-        if st.button(
-            "Skip the automated setup — show me the SQL commands",
-            type="secondary",
-            key="btn_show_manual_sql",
-        ):
-            st.session_state.step_standard = STEP_MANUAL_SQL
-            st.rerun()
-        st.divider()
-
         if st.button("Start Setup", key="btn_start_snowflake_setup"):
             if len(password) == 0:
                 st.error("Please provide a password")
@@ -1285,6 +1274,17 @@ def standard_setup(session_id):
                     key="btn_goto_downloads",
                 ):
                     st.rerun()
+
+        st.divider()
+        st.markdown("**⚠️ Can't get past MFA or Automated setup not working? ⚠️** Do it yourself instead:")
+        if st.button(
+            "Skip the automated setup — show me the Snowlake SQL commands",
+            type="secondary",
+            key="btn_show_manual_sql",
+        ):
+            st.session_state.step_standard = STEP_MANUAL_SQL
+            st.rerun()
+        st.divider()
 
     # Step 2: Download Configuration Files
     elif st.session_state.step_standard == 2:
