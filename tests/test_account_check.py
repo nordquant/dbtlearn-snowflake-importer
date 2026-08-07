@@ -79,11 +79,21 @@ class TestAccountCheckUI:
         monkeypatch.delenv("SNOWFLAKE_ACCOUNT", raising=False)
 
     def _at_on_step_1(self, monkeypatch, status):
-        monkeypatch.setattr(
-            requests,
-            "get",
-            lambda url, **kwargs: _FakeResponse(status),
-        )
+        """Start a session on step 1 where every account check returns ``status``.
+
+        ``status`` may also be a dict of {account: status} to give different
+        identifiers different verdicts.
+        """
+        self.requested = []
+
+        def fake_get(url, **kwargs):
+            self.requested.append(url)
+            if isinstance(status, dict):
+                account = url.split("//", 1)[1].split(".", 1)[0]
+                return _FakeResponse(status[account])
+            return _FakeResponse(status)
+
+        monkeypatch.setattr(requests, "get", fake_get)
         at = AppTest.from_file(APP_FILE, default_timeout=30)
         at.run()
         at.button(key="btn_start_setup").click().run()
@@ -135,21 +145,67 @@ class TestAccountCheckUI:
 
         assert any("doesn't know an account" in e.value for e in at.get("error"))
 
-    def test_result_disappears_when_the_account_is_edited(self, monkeypatch):
+    def test_leaving_the_field_is_enough_to_check_it(self, monkeypatch):
+        """Blur reruns the script, and that alone must produce a verdict.
+
+        Students shouldn't have to find a button to learn their account is wrong;
+        the button is there for anyone who wants an explicit action.
+        """
+        at = self._at_on_step_1(monkeypatch, 302)
+
+        at.text_input(key="std_input_snowflake_account").set_value(
+            "frgcsyo-ie17820"
+        ).run()
+
+        assert any("valid Snowflake account" in s.value for s in at.get("success"))
+
+    def test_the_verdict_follows_the_account_now_in_the_field(self, monkeypatch):
         """A stale verdict on a since-changed identifier would be misleading."""
-        at = self._at_on_step_1(monkeypatch, 404)
+        at = self._at_on_step_1(
+            monkeypatch, {"nosuchacct-zz99999": 404, "frgcsyo-ie17820": 302}
+        )
 
         at.text_input(key="std_input_snowflake_account").set_value(
             "nosuchacct-zz99999"
         ).run()
-        at.button(key="std_input_snowflake_account_check_button").click().run()
-        assert len(at.get("error")) == 1
+        assert any("doesn't know an account" in e.value for e in at.get("error"))
 
         at.text_input(key="std_input_snowflake_account").set_value(
             "frgcsyo-ie17820"
         ).run()
 
         assert not any("doesn't know an account" in e.value for e in at.get("error"))
+        assert any("valid Snowflake account" in s.value for s in at.get("success"))
+
+    def test_an_account_is_checked_once_however_many_reruns_follow(self, monkeypatch):
+        """Typing a password reruns the script — it must not re-hit Snowflake."""
+        at = self._at_on_step_1(monkeypatch, 302)
+
+        at.text_input(key="std_input_snowflake_account").set_value(
+            "frgcsyo-ie17820"
+        ).run()
+        at.text_input(key="std_input_snowflake_username").set_value("admin").run()
+        at.run()
+
+        assert self.requested == ["https://frgcsyo-ie17820.snowflakecomputing.com/"]
+
+    def test_the_button_rechecks_an_already_checked_account(self, monkeypatch):
+        """The explicit action has to do something, even on an unchanged value."""
+        at = self._at_on_step_1(monkeypatch, 302)
+
+        at.text_input(key="std_input_snowflake_account").set_value(
+            "frgcsyo-ie17820"
+        ).run()
+        at.button(key="std_input_snowflake_account_check_button").click().run()
+
+        assert len(self.requested) == 2
+
+    def test_the_placeholder_is_never_checked(self, monkeypatch):
+        """The untouched field isn't a real account — no request, no verdict."""
+        at = self._at_on_step_1(monkeypatch, 302)
+
+        assert self.requested == []
+        assert not at.get("success")
 
     def test_check_is_available_on_the_manual_page_too(self, monkeypatch):
         at = self._at_on_step_1(monkeypatch, 302)

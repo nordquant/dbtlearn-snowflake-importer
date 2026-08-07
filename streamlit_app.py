@@ -564,31 +564,41 @@ def check_snowflake_account_exists(account):
 
 
 def _render_account_check(key, account, is_valid):
-    """Render the "check account identifier" button and its last result.
+    """Check the account identifier and render the verdict, plus an explicit button.
 
-    The result is remembered alongside the account it was produced for, so it
-    disappears as soon as the student edits the field.
+    Leaving the field reruns the script with the new value, which is enough to
+    check it — students shouldn't have to press anything to find out their account
+    is wrong. The button is kept for anyone who wants an explicit action, and it
+    doubles as the commit path for a value typed but never blurred.
+
+    The result is remembered alongside the account it was produced for, so a
+    verdict is never shown against an identifier it wasn't produced for, and each
+    account costs at most one request no matter how many reruns follow.
     """
     result_key = f"{key}_check_result"
 
     # Deliberately never disabled: clicking the button is what commits a freshly
     # typed value, so a disabled button would trap students who type and click
     # without pressing Enter first.
-    if st.button(
+    clicked = st.button(
         "Check account identifier",
         key=f"{key}_check_button",
         help="Checks that this account exists. No password is sent.",
-    ):
-        if not is_valid:
-            st.session_state.pop(result_key, None)
-            st.warning("Enter your Snowflake account first.")
-            return
+    )
 
-        with st.spinner("Checking..."):
-            exists, detail = check_snowflake_account_exists(account)
-        st.session_state[result_key] = (account, exists, detail)
+    if clicked and not is_valid:
+        st.session_state.pop(result_key, None)
+        st.warning("Enter your Snowflake account first.")
+        return
 
     remembered = st.session_state.get(result_key)
+    is_unchecked = not remembered or remembered[0] != account
+    if is_valid and (clicked or is_unchecked):
+        with st.spinner("Checking..."):
+            exists, detail = check_snowflake_account_exists(account)
+        remembered = (account, exists, detail)
+        st.session_state[result_key] = remembered
+
     if not remembered or remembered[0] != account:
         return
 
@@ -642,11 +652,27 @@ def render_account_input(key):
     return account, is_valid
 
 
-def render_credentials_form(key_prefix=""):
-    """Render Snowflake credentials form. Returns (hostname, username, password, passcode).
+def render_credentials_form(key_prefix, submit_label, submit_key):
+    """Render the Snowflake credentials form and its submit button.
+
+    Returns (submitted, hostname, username, password, passcode).
+
+    The credential fields live in an ``st.form`` for one reason: a bare
+    ``st.text_input`` only hands its value to the server when it loses focus, and
+    that commit races the click on a plain ``st.button``. Type a password, click
+    straight through to the button, and the click's rerun can reach the server
+    before the field's — the script then sees an empty password even though the
+    student is looking at a filled-in field. A form submits every field it holds
+    together with the click, so the race cannot happen. It also means Enter
+    submits, which is what students try first anyway.
+
+    The account field stays outside the form on purpose: it validates as soon as
+    focus leaves it, and form fields are silent until submit.
 
     Args:
         key_prefix: Prefix for widget keys to avoid conflicts when rendered in multiple tabs.
+        submit_label: Label for the submit button.
+        submit_key: Widget key for the submit button.
     """
     registry.register("snowflake", "snowflake.sqlalchemy", "dialect")
 
@@ -659,36 +685,40 @@ def render_credentials_form(key_prefix=""):
     )
     hostname, _ = render_account_input(f"{key_prefix}input_snowflake_account")
 
-    username = st.text_input(
-        "Snowflake username (change this is you didn't set it to `admin` at registration):",
-        env_username,
-        key=f"{key_prefix}input_snowflake_username",
-    )
-    password = st.text_input(
-        "Snowflake Password:",
-        env_password,
-        type="password",
-        key=f"{key_prefix}input_snowflake_password",
-    )
+    with st.form(key=f"{key_prefix}credentials_form", border=False):
+        username = st.text_input(
+            "Snowflake username (change this is you didn't set it to `admin` at registration):",
+            env_username,
+            key=f"{key_prefix}input_snowflake_username",
+        )
+        password = st.text_input(
+            "Snowflake Password:",
+            env_password,
+            type="password",
+            key=f"{key_prefix}input_snowflake_password",
+        )
 
-    st.warning(
-        "**Multi Factor Authentication (MFA)**\n\n"
-        "* **Duo app:** leave the code empty and approve the notification on your phone.\n"
-        "* **Authenticator app:** enter your current 6-digit code.\n\n"
-        "No MFA yet? Try to leave the MFA box below empty, and it's not working, do to your snowflake and click: your account name (bottom left) → **Account** → "
-        "**Authentication** → **Add authentication method** → **Authenticator** "
-        "(not Passkey)."
-    )
+        st.warning(
+            "**Multi Factor Authentication (MFA)**\n\n"
+            "* **Duo app:** leave the code empty and approve the notification on your phone.\n"
+            "* **Authenticator app:** enter your current 6-digit code.\n\n"
+            "No MFA yet? Try to leave the MFA box below empty, and it's not working, do to your snowflake and click: your account name (bottom left) → **Account** → "
+            "**Authentication** → **Add authentication method** → **Authenticator** "
+            "(not Passkey)."
+        )
 
-    passcode_input = st.text_input(
-        "6-digit MFA code (leave empty for Duo push or if MFA is not enabled:",
-        max_chars=6,
-        key=f"{key_prefix}input_totp_passcode",
-    )
+        passcode_input = st.text_input(
+            "6-digit MFA code (leave empty for Duo push or if MFA is not enabled:",
+            max_chars=6,
+            key=f"{key_prefix}input_totp_passcode",
+        )
+
+        submitted = st.form_submit_button(submit_label, key=submit_key)
+
     # An empty field means "no TOTP" — we must not pass an empty passcode to Snowflake.
     passcode = passcode_input.strip() or None
 
-    return hostname, username, password, passcode
+    return submitted, hostname, username, password, passcode
 
 
 FALLBACK_APP_URL = "https://udemy-dbt-setup.streamlit.app/"
@@ -1177,9 +1207,13 @@ def standard_setup(session_id):
         _render_keypair_downloads()
 
         # Credentials form
-        hostname, username, password, passcode = render_credentials_form(key_prefix="std_")
+        submitted, hostname, username, password, passcode = render_credentials_form(
+            key_prefix="std_",
+            submit_label="Start Setup",
+            submit_key="btn_start_snowflake_setup",
+        )
 
-        if st.button("Start Setup", key="btn_start_snowflake_setup"):
+        if submitted:
             if len(password) == 0:
                 st.error("Please provide a password")
                 return
@@ -1397,9 +1431,13 @@ def capstone_setup(session_id):
             st.rerun()
 
         # Credentials form
-        hostname, username, password, passcode = render_credentials_form(key_prefix="cap_")
+        submitted, hostname, username, password, passcode = render_credentials_form(
+            key_prefix="cap_",
+            submit_label="Start Capstone Setup",
+            submit_key="btn_start_capstone_setup",
+        )
 
-        if st.button("Start Capstone Setup", key="btn_start_capstone_setup"):
+        if submitted:
             if len(password) == 0:
                 st.error("Please provide a password")
                 return
