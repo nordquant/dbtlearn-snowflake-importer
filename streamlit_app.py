@@ -714,13 +714,13 @@ def render_credentials_form(key_prefix, submit_label, submit_key):
             "**Multi Factor Authentication (MFA)**\n\n"
             "* **Duo app:** leave the code empty and approve the notification on your phone.\n"
             "* **Authenticator app:** enter your current 6-digit code.\n\n"
-            "No MFA yet? Try to leave the MFA box below empty, and it's not working, do to your snowflake and click: your account name (bottom left) → **Account** → "
+            "No MFA yet? Try to leave the MFA box below empty, and it's not working, go to your snowflake and click: your account name (bottom left) → **Account** → "
             "**Authentication** → **Add authentication method** → **Authenticator** "
             "(not Passkey)."
         )
 
         passcode_input = st.text_input(
-            "6-digit MFA code (leave empty for Duo push or if MFA is not enabled:",
+            "6-digit MFA code (leave empty for Duo push or if MFA is not enabled on your Snowflake account):",
             max_chars=6,
             key=f"{key_prefix}input_totp_passcode",
         )
