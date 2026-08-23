@@ -614,6 +614,15 @@ def _render_account_check(key, account, is_valid):
         st.warning("Couldn't reach Snowflake to check. You can still continue.")
 
 
+def account_is_entered(account_raw):
+    """True once the account field holds something other than the untouched placeholder.
+
+    ACCOUNT_PLACEHOLDER is itself a syntactically valid account identifier, so a
+    format check alone cannot tell "never filled in" from "filled in correctly".
+    """
+    return account_raw.strip() not in ("", ACCOUNT_PLACEHOLDER)
+
+
 def render_account_input(key):
     """Render the Snowflake account field with URL extraction and validation.
 
@@ -632,7 +641,7 @@ def render_account_input(key):
     account_raw = st.text_input(ACCOUNT_INPUT_LABEL, default_account, key=key)
     account = extract_snowflake_account(account_raw)
 
-    is_entered = account_raw.strip() not in ("", ACCOUNT_PLACEHOLDER)
+    is_entered = account_is_entered(account_raw)
     is_valid = is_entered and is_valid_snowflake_account(account)
 
     # Store the account in session state for later use. Kept unconditional so the
@@ -655,7 +664,10 @@ def render_account_input(key):
 def render_credentials_form(key_prefix, submit_label, submit_key):
     """Render the Snowflake credentials form and its submit button.
 
-    Returns (submitted, hostname, username, password, passcode).
+    Returns (submitted, hostname, username, password, passcode). ``submitted`` is
+    False when the account field is empty, still holds the placeholder, or isn't a
+    valid identifier — the form reports the problem itself, so callers never have to
+    guard against connecting to an account that cannot exist.
 
     The credential fields live in an ``st.form`` for one reason: a bare
     ``st.text_input`` only hands its value to the server when it loses focus, and
@@ -683,7 +695,7 @@ def render_credentials_form(key_prefix, submit_label, submit_key):
     st.info(
         "Now let's add your Snowflake Account name and Admin Credentials so we can set up the permissions and the datasets for you."
     )
-    hostname, _ = render_account_input(f"{key_prefix}input_snowflake_account")
+    hostname, account_valid = render_account_input(f"{key_prefix}input_snowflake_account")
 
     with st.form(key=f"{key_prefix}credentials_form", border=False):
         username = st.text_input(
@@ -717,6 +729,30 @@ def render_credentials_form(key_prefix, submit_label, submit_key):
 
     # An empty field means "no TOTP" — we must not pass an empty passcode to Snowflake.
     passcode = passcode_input.strip() or None
+
+    # A submit that cannot possibly succeed is not reported as one. The account field
+    # starts out holding ACCOUNT_PLACEHOLDER, which passes the format check, so a
+    # student who fills in only a password used to sail straight through to a real
+    # login attempt against xxxxxx-xxxxxxxx.snowflakecomputing.com — a guaranteed 404
+    # that reads to them as a broken tool. Swallowing the submit here rather than at
+    # each call site means no caller can forget the check.
+    if submitted and not account_valid:
+        account_raw = st.session_state.get(f"{key_prefix}input_snowflake_account", "")
+        if not account_is_entered(account_raw):
+            st.error(
+                "**Please fill in your Snowflake account identifier above.**\n\n"
+                f"The field still holds the `{ACCOUNT_PLACEHOLDER}` placeholder. Replace it "
+                "with the account from your Snowflake registration email — it looks like "
+                "`frgcsyo-ie17820` — or paste the full Snowflake URL and we'll pick the "
+                "identifier out of it."
+            )
+        else:
+            st.error(
+                f"**`{account_raw.strip()}` doesn't look like a Snowflake account "
+                "identifier.**\n\nPlease correct it above and press "
+                f"**{submit_label}** again."
+            )
+        submitted = False
 
     return submitted, hostname, username, password, passcode
 
@@ -765,6 +801,45 @@ def _notify_slack_of_connection_error(session_id, error_type, hostname, username
         logging.warning(f"{session_id}: Failed to post Slack notification: {slack_err}")
 
 
+def _is_account_not_found(error):
+    """True when Snowflake 404s the login request, i.e. the account identifier doesn't resolve.
+
+    Every Snowflake account is served from its own hostname, so an identifier that
+    doesn't exist fails as a 404 on /session/v1/login-request (error 290404) long
+    before any credential is checked. It always means a mistyped account — never a
+    bad password, and never a problem on our side.
+    """
+    text = str(getattr(error, "orig", error)).lower()
+    return "290404" in text or ("404 not found" in text and "login-request" in text)
+
+
+def _handle_account_not_found(session_id, hostname, username, error):
+    """Tell the student their account identifier is mistyped. Returns None, like its callers.
+
+    No Slack alert: a 404 is always a typo in the student's own input, so alerting
+    on it only buries the failures worth waking up for — the ones where Snowflake
+    is refusing *our server*. It stays in the logs, where the volume is a useful
+    signal about how confusing the account field is without paging anyone.
+
+    Deliberately skips _render_snowflake_fallback_notice() too: the fallback app
+    would 404 on the same identifier, so pointing there sends the student in a circle.
+    """
+    st.error(
+        f"**Snowflake doesn't know an account called `{hostname}`.**\n\n"
+        f"That almost always means `{hostname}` is mistyped — it is not a password "
+        "problem. Please check it character by character against your Snowflake "
+        "registration email and try again.\n\n"
+        "* It looks like `frgcsyo-ie17820`: two parts, one hyphen. It is **not** your username.\n"
+        "* Some accounts need a region suffix, e.g. `frgcsyo-ie17820.aws`.\n"
+        "* You can also paste the full Snowflake URL from your browser — we'll pick the "
+        "identifier out of it."
+    )
+    logging.warning(
+        f"{session_id}: Snowflake account not found (404). Account: {hostname}, Username: {username}: {error}"
+    )
+    return None
+
+
 def _connect_to_snowflake(session_id, hostname, username, password, passcode):
     """Attempt to connect to Snowflake. Returns (connection_cm, connection) or displays error and returns None."""
     try:
@@ -773,6 +848,8 @@ def _connect_to_snowflake(session_id, hostname, username, password, passcode):
             connection = connection_cm.__enter__()
         return connection_cm, connection
     except InterfaceError as e:
+        if _is_account_not_found(e):
+            return _handle_account_not_found(session_id, hostname, username, e)
         st.error(
             f"""Error connecting to Snowflake. This usually means that the snowflake account is invalid.
             Please verify the snowflake account and try again.\n\nOriginal Error: \n\n{e.orig}"""
@@ -784,6 +861,8 @@ def _connect_to_snowflake(session_id, hostname, username, password, passcode):
         )
         return None
     except DatabaseError as e:
+        if _is_account_not_found(e):
+            return _handle_account_not_found(session_id, hostname, username, e)
         print(e)
         error_str = str(e.orig) if hasattr(e, 'orig') else str(e)
 
@@ -825,6 +904,8 @@ def _connect_to_snowflake(session_id, hostname, username, password, passcode):
         )
         return None
     except Exception as e:
+        if _is_account_not_found(e):
+            return _handle_account_not_found(session_id, hostname, username, e)
 
         st.error(
             f"Error connecting to Snowflake.\n\nOriginal Error:\n\n{e}\n\nStacktrace:\n\n{traceback.format_exc()}"
