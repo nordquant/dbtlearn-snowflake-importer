@@ -8,3 +8,5 @@ __pycache__/
 # in the image — that's where Streamlit's static file serving reads from)
 /static/container-info.json
 .DS_Store
+# Written when the app runs outside a container (dbt.log, query_log.sql).
+/logs/

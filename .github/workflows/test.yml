@@ -169,6 +169,10 @@ jobs:
           docker rm test-app
 
       - name: Push Docker image
+        # Only main publishes. The job above still builds and health-checks the
+        # image on pull requests, but :latest is the tag production deploys, and
+        # a pull request is unreviewed by definition - it must not overwrite it.
+        if: github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -191,6 +195,7 @@ jobs:
           mv /tmp/.buildx-cache-new /tmp/.buildx-cache
 
       - name: Image pushed successfully
+        if: github.ref == 'refs/heads/main'
         run: |
           echo "Image pushed to ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
           echo "Image also tagged as ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
