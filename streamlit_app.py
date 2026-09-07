@@ -725,7 +725,12 @@ def render_credentials_form(key_prefix, submit_label, submit_key):
             key=f"{key_prefix}input_totp_passcode",
         )
 
-        submitted = st.form_submit_button(submit_label, key=submit_key)
+        submitted = st.form_submit_button(
+            submit_label,
+            type="primary",
+            use_container_width=True,
+            key=submit_key,
+        )
 
     # An empty field means "no TOTP" — we must not pass an empty passcode to Snowflake.
     passcode = passcode_input.strip() or None
@@ -1391,15 +1396,17 @@ def standard_setup(session_id):
                     st.rerun()
 
         st.divider()
-        st.markdown("**⚠️ Can't get past MFA or Automated setup not working? ⚠️** Do it yourself instead:")
-        if st.button(
-            "Skip the automated setup — show me the Snowlake SQL commands",
-            type="secondary",
-            key="btn_show_manual_sql",
+        with st.expander(
+            "⚠️ Can't get past MFA or the automated setup isn't working?", expanded=True
         ):
-            st.session_state.step_standard = STEP_MANUAL_SQL
-            st.rerun()
-        st.divider()
+            st.markdown("You can run the Snowflake commands yourself instead:")
+            if st.button(
+                "Skip the automated setup — show me the Snowflake SQL commands",
+                type="secondary",
+                key="btn_show_manual_sql",
+            ):
+                st.session_state.step_standard = STEP_MANUAL_SQL
+                st.rerun()
 
     # Step 2: Download Configuration Files
     elif st.session_state.step_standard == 2:
